@@ -1,6 +1,6 @@
 
 import React, { useRef, useState, forwardRef, useImperativeHandle, useEffect, useCallback } from 'react';
-import { DesignState, Point } from '../types';
+import { DesignState, Point, TextLayer } from '../types';
 import { Upload, Maximize2, PenTool, RotateCw, Move as MoveIcon } from 'lucide-react';
 
 interface CanvasProps {
@@ -93,12 +93,12 @@ const measureLineMetrics = (ctx: CanvasRenderingContext2D, text: string, letterS
     };
 };
 
-const measureTextLayout = (ctx: CanvasRenderingContext2D, design: DesignState, width: number) => {
-    const fontSize = (design.textSize / 100) * width;
-    ctx.font = `${design.isItalic ? 'italic' : 'normal'} ${design.isBold ? 'bold' : 'normal'} ${fontSize}px "${design.fontFamily}"`;
+const measureTextLayout = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: number) => {
+    const fontSize = (layer.textSize / 100) * width;
+    ctx.font = `${layer.isItalic ? 'italic' : 'normal'} ${layer.isBold ? 'bold' : 'normal'} ${fontSize}px "${layer.fontFamily}"`;
     
-    const scaledLetterSpacing = design.letterSpacing * (fontSize / 50);
-    const rawText = design.isUppercase ? design.textOverlay.toUpperCase() : design.textOverlay;
+    const scaledLetterSpacing = layer.letterSpacing * (fontSize / 50);
+    const rawText = layer.isUppercase ? layer.textOverlay.toUpperCase() : layer.textOverlay;
     const lines = rawText.split('\n');
     const lineHeight = fontSize * 1.0; // Tight line height matching font size
     const totalHeight = lines.length * lineHeight;
@@ -119,6 +119,9 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textCanvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  
+  // Store the actual loaded image for rendering onto canvas
+  const bgImageRef = useRef<HTMLImageElement | null>(null);
 
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [zoomScale, setZoomScale] = useState(1);
@@ -131,43 +134,48 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
 
   // Refs for drag calculations
   const dragStartRef = useRef({ x: 0, y: 0 }); // Screen coordinates
-  const initialDesignRef = useRef<DesignState | null>(null); // Snapshot of design at drag start
+  const initialLayerRef = useRef<TextLayer | null>(null); // Snapshot of layer at drag start
   const currentPathRef = useRef<Point[]>([]);
   
   // Metrics for Gizmo
   const [textBounds, setTextBounds] = useState({ width: 0, height: 0 });
 
+  const activeLayer = design.layers.find(l => l.id === design.activeLayerId);
+
   // Reset zoom and get dims when the image changes
   useEffect(() => {
     setZoomScale(1);
     setPan({ x: 0, y: 0 });
-    setImgDims(null);
-
+    
     if (imageSrc) {
         const i = new Image();
+        i.crossOrigin = "anonymous";
         i.onload = () => {
+            bgImageRef.current = i;
             setImgDims({ w: i.naturalWidth, h: i.naturalHeight });
         };
         i.onerror = () => {
             console.error("Failed to load image dimensions");
+            bgImageRef.current = null;
             setImgDims(null); 
         };
         i.src = imageSrc;
     } else {
+        bgImageRef.current = null;
         setImgDims(null);
     }
   }, [imageSrc]);
 
-  // Update Text Bounds when design changes
+  // Update Text Bounds when active layer changes
   useEffect(() => {
-      if (textCanvasRef.current && imgDims) {
+      if (textCanvasRef.current && imgDims && activeLayer) {
           const ctx = textCanvasRef.current.getContext('2d');
           if (ctx) {
-              const metrics = measureTextLayout(ctx, design, imgDims.w);
+              const metrics = measureTextLayout(ctx, activeLayer, imgDims.w);
               setTextBounds(metrics);
           }
       }
-  }, [design, imgDims]);
+  }, [activeLayer, imgDims]);
 
   // Handle mouse wheel zoom
   const handleWheel = (e: React.WheelEvent) => {
@@ -205,10 +213,10 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
       const handleEl = target.closest('[data-handle]');
       const handleType = handleEl?.getAttribute('data-handle');
 
-      if (handleType) {
+      if (handleType && activeLayer) {
           e.preventDefault();
           e.stopPropagation();
-          initialDesignRef.current = { ...design };
+          initialLayerRef.current = { ...activeLayer };
           dragStartRef.current = { x: e.clientX, y: e.clientY };
 
           if (handleType === 'rotate') {
@@ -225,18 +233,18 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
       }
 
       // 2. Path Mode interactions
-      if (design.isPathInputMode) {
+      if (activeLayer?.isPathInputMode) {
           e.preventDefault();
           setInteractionMode('DRAW_PATH');
           currentPathRef.current = [coords];
           return;
       }
 
-      if (design.isPathMoveMode && design.pathPoints.length > 0) {
+      if (activeLayer?.isPathMoveMode && activeLayer.pathPoints.length > 0) {
           e.preventDefault();
           e.stopPropagation();
           setInteractionMode('MOVE_PATH');
-          initialDesignRef.current = { ...design }; // Store points snapshot
+          initialLayerRef.current = { ...activeLayer }; // Store points snapshot
           dragStartRef.current = { x: coords.x, y: coords.y }; // Use intrinsic for path move
           return;
       }
@@ -264,13 +272,13 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
       }
 
       if (interactionMode === 'MOVE_PATH') {
-           if (!coords || !initialDesignRef.current) return;
+           if (!coords || !initialLayerRef.current) return;
            e.preventDefault();
            
            const dx = coords.x - dragStartRef.current.x;
            const dy = coords.y - dragStartRef.current.y;
            
-           const newPoints = initialDesignRef.current.pathPoints.map(p => ({
+           const newPoints = initialLayerRef.current.pathPoints.map(p => ({
                x: p.x + dx,
                y: p.y + dy
            }));
@@ -291,76 +299,69 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
       // --- GIZMO LOGIC ---
       if (['GIZMO_MOVE', 'GIZMO_SCALE', 'GIZMO_ROTATE'].includes(interactionMode)) {
           e.preventDefault();
-          if (!initialDesignRef.current) return;
+          if (!initialLayerRef.current || !activeLayer) return;
 
-          const startDesign = initialDesignRef.current;
-          
-          if (interactionMode === 'GIZMO_MOVE') {
-               // Calculate delta in intrinsic pixels
-               const rect = containerRef.current!.getBoundingClientRect();
-               // Factor in zoom: The container rect *is* scaled. 
-               // 1 screen pixel = (imgDims.w / rect.width) intrinsic pixels.
-               const scaleFactor = imgDims.w / rect.width;
-               
-               const dxScreen = e.clientX - dragStartRef.current.x;
-               const dyScreen = e.clientY - dragStartRef.current.y;
-               
-               const dxIntrinsic = dxScreen * scaleFactor;
-               const dyIntrinsic = dyScreen * scaleFactor;
-               
-               // Convert intrinsic delta to percentage
-               const dxPercent = (dxIntrinsic / imgDims.w) * 100;
-               const dyPercent = (dyIntrinsic / imgDims.h) * 100;
+          const startLayer = initialLayerRef.current;
+          const updatedLayers = design.layers.map(l => {
+              if (l.id !== activeLayer.id) return l;
 
-               onUpdateDesign({
-                   overlayPosition: {
-                       x: Math.max(0, Math.min(100, startDesign.overlayPosition.x + dxPercent)),
-                       y: Math.max(0, Math.min(100, startDesign.overlayPosition.y + dyPercent))
+              if (interactionMode === 'GIZMO_MOVE') {
+                   // Calculate delta in intrinsic pixels
+                   const rect = containerRef.current!.getBoundingClientRect();
+                   const scaleFactor = imgDims.w / rect.width;
+                   
+                   const dxScreen = e.clientX - dragStartRef.current.x;
+                   const dyScreen = e.clientY - dragStartRef.current.y;
+                   
+                   const dxIntrinsic = dxScreen * scaleFactor;
+                   const dyIntrinsic = dyScreen * scaleFactor;
+                   
+                   const dxPercent = (dxIntrinsic / imgDims.w) * 100;
+                   const dyPercent = (dyIntrinsic / imgDims.h) * 100;
+
+                   return {
+                       ...l,
+                       overlayPosition: {
+                           x: Math.max(0, Math.min(100, startLayer.overlayPosition.x + dxPercent)),
+                           y: Math.max(0, Math.min(100, startLayer.overlayPosition.y + dyPercent))
+                       }
+                   };
+              }
+
+              if (interactionMode === 'GIZMO_SCALE') {
+                   const rect = containerRef.current!.getBoundingClientRect();
+                   const cx = rect.left + (startLayer.overlayPosition.x / 100) * rect.width;
+                   const cy = rect.top + (startLayer.overlayPosition.y / 100) * rect.height;
+                   
+                   const startDist = Math.hypot(dragStartRef.current.x - cx, dragStartRef.current.y - cy);
+                   const currDist = Math.hypot(e.clientX - cx, e.clientY - cy);
+                   
+                   const ratio = currDist / (startDist || 1);
+                   const newSize = Math.min(50, Math.max(0.1, startLayer.textSize * ratio));
+                   
+                   return { ...l, textSize: newSize };
+              }
+
+              if (interactionMode === 'GIZMO_ROTATE') {
+                   const rect = containerRef.current!.getBoundingClientRect();
+                   const cx = rect.left + (startLayer.overlayPosition.x / 100) * rect.width;
+                   const cy = rect.top + (startLayer.overlayPosition.y / 100) * rect.height;
+                   
+                   const angleRad = Math.atan2(e.clientY - cy, e.clientX - cx);
+                   let angleDeg = angleRad * (180 / Math.PI) + 90; 
+                   
+                   if (angleDeg < 0) angleDeg += 360;
+                   
+                   if (e.shiftKey) {
+                       angleDeg = Math.round(angleDeg / 15) * 15;
                    }
-               });
-          }
 
-          if (interactionMode === 'GIZMO_SCALE') {
-               const rect = containerRef.current!.getBoundingClientRect();
-               // Center of the text in screen coordinates
-               const cx = rect.left + (startDesign.overlayPosition.x / 100) * rect.width;
-               const cy = rect.top + (startDesign.overlayPosition.y / 100) * rect.height;
-               
-               // Distances
-               const startDist = Math.hypot(dragStartRef.current.x - cx, dragStartRef.current.y - cy);
-               const currDist = Math.hypot(e.clientX - cx, e.clientY - cy);
-               
-               const ratio = currDist / (startDist || 1);
-               // Removed rounding for fluid resize
-               const newSize = Math.min(50, Math.max(0.1, startDesign.textSize * ratio));
-               
-               onUpdateDesign({ textSize: newSize });
-          }
+                   return { ...l, rotation: Math.round(angleDeg) };
+              }
+              return l;
+          });
 
-          if (interactionMode === 'GIZMO_ROTATE') {
-               const rect = containerRef.current!.getBoundingClientRect();
-               const cx = rect.left + (startDesign.overlayPosition.x / 100) * rect.width;
-               const cy = rect.top + (startDesign.overlayPosition.y / 100) * rect.height;
-               
-               // Rotation logic: Measure angle relative to center
-               // We add 90 degrees because atan2(0, -1) (top) is -90 deg, but our 0 deg is right.
-               // Actually, let's just use the delta angle from start, but absolute angle is more robust.
-               const angleRad = Math.atan2(e.clientY - cy, e.clientX - cx);
-               let angleDeg = angleRad * (180 / Math.PI) + 90; // Align 0 to top?
-               
-               // Standard CSS rotation: 0 is Up? No, 0 is usually Right for math, but for CSS 'rotate(0deg)' depends.
-               // Let's assume standard behavior: moving mouse right from top = clockwise.
-               
-               // Normalize
-               if (angleDeg < 0) angleDeg += 360;
-               
-               // Snap to 15 deg
-               if (e.shiftKey) {
-                   angleDeg = Math.round(angleDeg / 15) * 15;
-               }
-
-               onUpdateDesign({ rotation: Math.round(angleDeg) });
-          }
+          onUpdateDesign({ layers: updatedLayers });
       }
   };
 
@@ -371,37 +372,37 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
       }
       setInteractionMode('NONE');
       setActiveGizmoHandle(null);
-      initialDesignRef.current = null;
+      initialLayerRef.current = null;
   };
 
 
   // --- Core Rendering Logic ---
-  const renderToContext = useCallback((
-      ctx: CanvasRenderingContext2D | null, 
-      width: number, 
+  const renderLayer = (
+      ctx: CanvasRenderingContext2D,
+      layer: TextLayer,
+      width: number,
       height: number,
-      isPreview: boolean = false,
-      shouldClear: boolean = true,
+      isPreview: boolean,
       overrideBlendMode?: GlobalCompositeOperation
   ) => {
-    if (!ctx) return;
+    if (!layer.visible) return;
 
-    if (shouldClear) {
-        ctx.clearRect(0, 0, width, height);
-    }
+    const isActive = layer.id === design.activeLayerId;
     
+    // Set Base Context State
     ctx.filter = 'none';
     ctx.globalAlpha = 1.0;
     ctx.globalCompositeOperation = 'source-over';
 
-    const effectiveBlendMode = overrideBlendMode || (isPreview ? 'source-over' : (design.blendMode === 'normal' ? 'source-over' : design.blendMode));
+    // Allow blend modes in preview, unless specifically overridden
+    const effectiveBlendMode = overrideBlendMode || (layer.blendMode === 'normal' ? 'source-over' : layer.blendMode);
 
-    const activePointsRaw = interactionMode === 'DRAW_PATH' ? currentPathRef.current : design.pathPoints;
-    const activePoints = interactionMode === 'DRAW_PATH' ? activePointsRaw : getSmoothedPoints(activePointsRaw, design.pathSmoothing);
+    const activePointsRaw = (interactionMode === 'DRAW_PATH' && isActive) ? currentPathRef.current : layer.pathPoints;
+    const activePoints = (interactionMode === 'DRAW_PATH' && isActive) ? activePointsRaw : getSmoothedPoints(activePointsRaw, layer.pathSmoothing);
 
-    const showPathLine = isPreview && (
+    const showPathLine = isPreview && isActive && (
         (interactionMode === 'DRAW_PATH' && activePoints.length > 1) ||
-        (design.isPathMoveMode && activePoints.length > 1)
+        (layer.isPathMoveMode && activePoints.length > 1)
     );
 
     if (showPathLine) {
@@ -412,7 +413,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
 
-        if (design.isPathMoveMode && interactionMode !== 'DRAW_PATH') {
+        if (layer.isPathMoveMode && interactionMode !== 'DRAW_PATH') {
              ctx.setLineDash([15, 15]); 
              ctx.globalAlpha = 0.6;
         }
@@ -427,21 +428,20 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
         if (interactionMode === 'DRAW_PATH') return; 
     }
 
-    const fontSize = (design.textSize / 100) * width;
-    const fontWeight = design.isBold ? 'bold' : 'normal';
-    const fontStyle = design.isItalic ? 'italic' : 'normal';
+    const fontSize = (layer.textSize / 100) * width;
+    const fontWeight = layer.isBold ? 'bold' : 'normal';
+    const fontStyle = layer.isItalic ? 'italic' : 'normal';
     
-    ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px "${design.fontFamily}"`;
-    ctx.textAlign = 'left'; // Always calculate from left for manual ink alignment
+    ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px "${layer.fontFamily}"`;
+    ctx.textAlign = 'left'; 
     ctx.textBaseline = 'middle';
 
-    const scaledLetterSpacing = design.letterSpacing * (fontSize / 50); 
-    const rawText = design.isUppercase ? design.textOverlay.toUpperCase() : design.textOverlay;
+    const scaledLetterSpacing = layer.letterSpacing * (fontSize / 50); 
+    const rawText = layer.isUppercase ? layer.textOverlay.toUpperCase() : layer.textOverlay;
     const lines = rawText.split('\n');
-    const lineHeight = fontSize * 1.0; // Tight line height matching font size
+    const lineHeight = fontSize * 1.0; 
     const totalHeight = lines.length * lineHeight;
 
-    // Recalculate Max Ink Width for Alignment Context
     let maxInkWidth = 0;
     const lineMetrics = lines.map(line => {
         const m = measureLineMetrics(ctx, line, scaledLetterSpacing);
@@ -449,34 +449,33 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
         return m;
     });
 
-    let normalModeFillStyle: string | CanvasGradient = design.textColor;
+    let normalModeFillStyle: string | CanvasGradient = layer.textColor;
     
-    if (design.specialEffect === 'gradient' && !design.isHollow) {
+    if (layer.specialEffect === 'gradient' && !layer.isHollow) {
         const r = Math.sqrt((maxInkWidth/2)**2 + (totalHeight/2)**2);
-        const angleRad = (design.effectAngle * Math.PI) / 180;
+        const angleRad = (layer.effectAngle * Math.PI) / 180;
         const x1 = -Math.cos(angleRad) * r;
         const y1 = -Math.sin(angleRad) * r;
         const x2 = Math.cos(angleRad) * r;
         const y2 = Math.sin(angleRad) * r;
 
         const grad = ctx.createLinearGradient(x1, y1, x2, y2);
-        const halfSpread = design.effectIntensity / 2; 
+        const halfSpread = layer.effectIntensity / 2; 
         const stop1 = Math.max(0, Math.min(1, (50 - halfSpread) / 100));
         const stop2 = Math.max(0, Math.min(1, (50 + halfSpread) / 100));
 
-        grad.addColorStop(stop1, design.textColor);
-        grad.addColorStop(stop2, design.effectColor);
+        grad.addColorStop(stop1, layer.textColor);
+        grad.addColorStop(stop2, layer.effectColor);
         normalModeFillStyle = grad;
     }
 
     const drawTextItem = (text: string, offsetX: number, offsetY: number, colorOverride?: string, forceHollow?: boolean, disableOutline: boolean = false) => {
-        const isHollow = forceHollow !== undefined ? forceHollow : design.isHollow;
-        const shouldDrawOutline = !disableOutline && design.hasOutline;
+        const isHollow = forceHollow !== undefined ? forceHollow : layer.isHollow;
+        const shouldDrawOutline = !disableOutline && layer.hasOutline;
 
         ctx.save();
 
         if (activePoints && activePoints.length > 1) {
-            // Path Drawing Logic
             const path = activePoints;
             const distances = [0];
             for (let i = 1; i < path.length; i++) {
@@ -492,8 +491,8 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
             }
 
             let currentDist = 0;
-            if (design.textAlign === 'center') currentDist = (totalPathLen - totalTextWidth) / 2;
-            if (design.textAlign === 'right') currentDist = totalPathLen - totalTextWidth;
+            if (layer.textAlign === 'center') currentDist = (totalPathLen - totalTextWidth) / 2;
+            if (layer.textAlign === 'right') currentDist = totalPathLen - totalTextWidth;
             
             currentDist += offsetX;
             const normalOffset = offsetY;
@@ -521,29 +520,28 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                     const xFinal = xBase + Math.sin(angle) * normalOffset; 
                     const yFinal = yBase - Math.cos(angle) * normalOffset; 
                     
-                    // Apply Letter Rotation to the angle
-                    const letterRotRad = (design.letterRotation * Math.PI) / 180;
+                    const letterRotRad = (layer.letterRotation * Math.PI) / 180;
 
                     ctx.translate(xFinal, yFinal);
                     ctx.rotate(angle + letterRotRad);
                     
-                    let activeFill = colorOverride || design.textColor;
-                    if (!colorOverride && design.specialEffect === 'gradient' && !isHollow) {
+                    let activeFill = colorOverride || layer.textColor;
+                    if (!colorOverride && layer.specialEffect === 'gradient' && !isHollow) {
                         const gradT = Math.max(0, Math.min(1, charMidDist / totalPathLen));
-                        activeFill = interpolateColor(design.textColor, design.effectColor, gradT);
+                        activeFill = interpolateColor(layer.textColor, layer.effectColor, gradT);
                     }
 
                     if (isHollow) {
-                         ctx.lineWidth = design.hasOutline ? design.outlineWidth : 2; 
-                         ctx.strokeStyle = colorOverride || (design.hasOutline ? design.outlineColor : design.textColor);
+                         ctx.lineWidth = layer.hasOutline ? layer.outlineWidth : 2; 
+                         ctx.strokeStyle = colorOverride || (layer.hasOutline ? layer.outlineColor : layer.textColor);
                          ctx.strokeText(char, 0, 0);
                     } else {
                          ctx.fillStyle = activeFill;
                          ctx.fillText(char, 0, 0);
                          
                          if (shouldDrawOutline) {
-                             ctx.lineWidth = design.outlineWidth;
-                             ctx.strokeStyle = design.outlineColor;
+                             ctx.lineWidth = layer.outlineWidth;
+                             ctx.strokeStyle = layer.outlineColor;
                              ctx.strokeText(char, 0, 0);
                          }
                     }
@@ -555,14 +553,14 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
             }
 
         } else {
-            const xPos = (design.overlayPosition.x / 100) * width;
-            const yPos = (design.overlayPosition.y / 100) * height;
+            const xPos = (layer.overlayPosition.x / 100) * width;
+            const yPos = (layer.overlayPosition.y / 100) * height;
             
             ctx.translate(xPos, yPos);
             
-            if (design.rotation !== 0) ctx.rotate((design.rotation * Math.PI) / 180);
-            const sX = design.flipX ? -1 : 1;
-            const sY = design.flipY ? -1 : 1;
+            if (layer.rotation !== 0) ctx.rotate((layer.rotation * Math.PI) / 180);
+            const sX = layer.flipX ? -1 : 1;
+            const sY = layer.flipY ? -1 : 1;
             if (sX !== 1 || sY !== 1) ctx.scale(sX, sY);
 
             const startY = -(totalHeight / 2) + (lineHeight / 2);
@@ -572,48 +570,42 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                 const m = lineMetrics[i];
                 const chars = line.split('');
                 
-                // Alignment Calculation based on Ink Bounds vs Max Ink Bounds of block
                 let startX = 0;
                 
-                if (design.textAlign === 'left') {
-                    // Align Ink Left to Box Left
+                if (layer.textAlign === 'left') {
                     startX = -(maxInkWidth / 2) - m.inkLeft;
-                } else if (design.textAlign === 'right') {
-                    // Align Ink Right to Box Right
+                } else if (layer.textAlign === 'right') {
                     startX = (maxInkWidth / 2) - m.inkRight;
                 } else {
-                    // Center Ink
                     const inkCenter = (m.inkLeft + m.inkRight) / 2;
                     startX = -inkCenter;
                 }
                 
-                // Drawing loop using advance widths
                 let currentAdvance = startX + offsetX;
                 chars.forEach((char, idx) => {
                     const charW = ctx.measureText(char).width;
                     
-                    // Letter Rotation Logic (Normal Mode)
-                    const isRotated = design.letterRotation !== 0;
+                    const isRotated = layer.letterRotation !== 0;
                     if (isRotated) {
                         const centerX = currentAdvance + charW / 2;
-                        const centerY = lineY; // textBaseline is middle
+                        const centerY = lineY; 
                         ctx.save();
                         ctx.translate(centerX, centerY);
-                        ctx.rotate((design.letterRotation * Math.PI) / 180);
+                        ctx.rotate((layer.letterRotation * Math.PI) / 180);
                         ctx.translate(-centerX, -centerY);
                     }
 
                     if (isHollow) {
-                        ctx.lineWidth = design.hasOutline ? design.outlineWidth : 2; 
-                        ctx.strokeStyle = colorOverride || (design.hasOutline ? design.outlineColor : design.textColor);
+                        ctx.lineWidth = layer.hasOutline ? layer.outlineWidth : 2; 
+                        ctx.strokeStyle = colorOverride || (layer.hasOutline ? layer.outlineColor : layer.textColor);
                         ctx.strokeText(char, currentAdvance, lineY);
                     } else {
                         ctx.fillStyle = colorOverride || normalModeFillStyle;
                         ctx.fillText(char, currentAdvance, lineY);
                         
                         if (shouldDrawOutline) {
-                            ctx.lineWidth = design.outlineWidth;
-                            ctx.strokeStyle = design.outlineColor;
+                            ctx.lineWidth = layer.outlineWidth;
+                            ctx.strokeStyle = layer.outlineColor;
                             ctx.strokeText(char, currentAdvance, lineY);
                         }
                     }
@@ -627,7 +619,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
             });
 
             if (sX !== 1 || sY !== 1) ctx.scale(sX, sY);
-            if (design.rotation !== 0) ctx.rotate(-(design.rotation * Math.PI) / 180);
+            if (layer.rotation !== 0) ctx.rotate(-(layer.rotation * Math.PI) / 180);
             ctx.translate(-xPos, -yPos);
         }
 
@@ -636,15 +628,15 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
 
 
     // 1. Shadow Pass
-    if (design.hasShadow) {
+    if (layer.hasShadow) {
         ctx.save();
-        ctx.globalAlpha = design.opacity; 
+        ctx.globalAlpha = layer.opacity; 
         ctx.globalCompositeOperation = effectiveBlendMode as GlobalCompositeOperation;
-        ctx.shadowColor = design.shadowColor;
-        ctx.shadowBlur = (design.shadowBlur / 100) * (fontSize * 2);
+        ctx.shadowColor = layer.shadowColor;
+        ctx.shadowBlur = (layer.shadowBlur / 100) * (fontSize * 2);
         
-        const shadowRad = (design.shadowAngle * Math.PI) / 180;
-        const shadowDist = (design.shadowOffset / 100) * fontSize;
+        const shadowRad = (layer.shadowAngle * Math.PI) / 180;
+        const shadowDist = (layer.shadowOffset / 100) * fontSize;
         const sx = Math.cos(shadowRad) * shadowDist;
         const sy = Math.sin(shadowRad) * shadowDist;
         
@@ -653,44 +645,39 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
         ctx.shadowOffsetX = sx + OFFSET_HACK;
         ctx.shadowOffsetY = sy;
         
-        drawTextItem(rawText, 0, 0, design.isHollow ? undefined : design.textColor, design.isHollow);
+        drawTextItem(rawText, 0, 0, layer.isHollow ? undefined : layer.textColor, layer.isHollow);
         ctx.restore();
     }
 
     // 2. Special Effects
-    if (design.specialEffect === 'echo') {
+    if (layer.specialEffect === 'echo') {
         const echoCount = 5;
-        const startOpacity = design.opacity;
-        const angleRad = (design.effectAngle * Math.PI) / 180;
-        const distanceStep = design.effectIntensity * (width * 0.0005); 
+        const startOpacity = layer.opacity;
+        const angleRad = (layer.effectAngle * Math.PI) / 180;
+        const distanceStep = layer.effectIntensity * (width * 0.0005); 
 
         ctx.globalCompositeOperation = effectiveBlendMode as GlobalCompositeOperation;
         for (let i = echoCount; i > 0; i--) {
              const dx = Math.cos(angleRad) * distanceStep * i;
              const dy = Math.sin(angleRad) * distanceStep * i;
              ctx.globalAlpha = startOpacity * (0.1 + (0.5 * (1 - i/echoCount))); 
-             drawTextItem(rawText, dx, dy, undefined, design.isHollow);
+             drawTextItem(rawText, dx, dy, undefined, layer.isHollow);
         }
     }
 
-    if (design.specialEffect === 'glitch') {
-        const offset = (design.effectIntensity / 100) * (fontSize * 0.5);
-        const angleRad = (design.effectAngle * Math.PI) / 180;
+    if (layer.specialEffect === 'glitch') {
+        const offset = (layer.effectIntensity / 100) * (fontSize * 0.5);
+        const angleRad = (layer.effectAngle * Math.PI) / 180;
 
-        if (design.isRainbowGlitch) {
+        if (layer.isRainbowGlitch) {
              const colors = ['#FF0000', '#FF7F00', '#FFFF00', '#00FF00', '#0000FF', '#4B0082', '#9400D3'];
-             const spread = offset * 3.0; // Extended offset range by 2.5x
+             const spread = offset * 3.0; 
              
              ctx.save();
-             // Ensure composite operation allows layers to stack nicely
              ctx.globalCompositeOperation = 'source-over'; 
 
-             // Fix for blur: Use shadowBlur fallback instead of context filter.
-             // This ensures reliable rendering of blurred text across all contexts.
              const blurScale = width / 1000;
-             const blurAmount = design.rainbowBlur * blurScale;
-             
-             // Constants for the shadow offset hack
+             const blurAmount = layer.rainbowBlur * blurScale;
              const OFFSET_HACK = 20000;
 
              colors.forEach((c, i) => {
@@ -700,37 +687,25 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                  const dy = Math.sin(angleRad) * dist;
                  
                  const rgb = hexToRgb(c);
-                 const rgbaColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${design.rainbowOpacity})`;
+                 const rgbaColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${layer.rainbowOpacity})`;
                  
                  if (blurAmount > 0) {
-                     // Robust Blur using Shadow with Offset Hack
-                     // We move the context extremely far away, draw opaque text, 
-                     // and set shadow offset to bring the shadow back to the correct position.
                      ctx.save();
-                     
                      ctx.shadowColor = rgbaColor;
                      ctx.shadowBlur = blurAmount;
                      ctx.shadowOffsetX = OFFSET_HACK;
                      ctx.shadowOffsetY = 0;
-                     
-                     // Move drawing context off-screen
                      ctx.translate(-OFFSET_HACK, 0);
-
-                     // Draw OPAQUE text (black) so the shadow is fully generated.
-                     // The shadow receives the color from ctx.shadowColor.
                      drawTextItem(rawText, dx, dy, '#000000', false, true);
-                     
                      ctx.restore();
                  } else {
-                     // Crisp text rendering
                      drawTextItem(rawText, dx, dy, rgbaColor, false, true);
                  }
              });
-             
              ctx.restore();
         } else {
-            const c1 = design.effectColor;
-            const c2 = design.effectColor2;
+            const c1 = layer.effectColor;
+            const c2 = layer.effectColor2;
             
             ctx.save();
             ctx.globalAlpha = 1.0; 
@@ -754,12 +729,42 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
 
     // 3. Main Text Pass
     ctx.save();
-    ctx.globalAlpha = design.opacity;
+    ctx.globalAlpha = layer.opacity;
     ctx.globalCompositeOperation = effectiveBlendMode as GlobalCompositeOperation;
     drawTextItem(rawText, 0, 0, undefined, undefined); 
     ctx.restore();
+  };
 
-  }, [design, interactionMode]);
+  const renderToContext = useCallback((
+      ctx: CanvasRenderingContext2D | null, 
+      width: number, 
+      height: number,
+      isPreview: boolean = false,
+      shouldClear: boolean = true,
+      overrideBlendMode?: GlobalCompositeOperation,
+      overrideBgImage?: HTMLImageElement
+  ) => {
+      if (!ctx) return;
+      
+      const bgImg = overrideBgImage || bgImageRef.current;
+
+      if (shouldClear) {
+          // KEY CHANGE: Draw the background image onto the canvas if available.
+          // This allows standard globalCompositeOperation to blend with the background pixels.
+          if (bgImg) {
+              ctx.clearRect(0, 0, width, height); // Safety clear
+              ctx.drawImage(bgImg, 0, 0, width, height);
+          } else {
+              ctx.clearRect(0, 0, width, height);
+          }
+      }
+
+      // Render all visible layers
+      design.layers.forEach(layer => {
+          renderLayer(ctx, layer, width, height, isPreview, overrideBlendMode);
+      });
+
+  }, [design.layers, interactionMode, design.activeLayerId]);
 
   // Live Preview Renderer
   useEffect(() => {
@@ -792,30 +797,13 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
     finalCanvas.width = img.naturalWidth;
     finalCanvas.height = img.naturalHeight;
 
-    // 1. Draw Background Image
-    finalCtx.drawImage(img, 0, 0);
-
-    // 2. Create Overlay Canvas (Text & Effects)
-    const overlayCanvas = document.createElement('canvas');
-    overlayCanvas.width = finalCanvas.width;
-    overlayCanvas.height = finalCanvas.height;
-    const overlayCtx = overlayCanvas.getContext('2d');
-
-    // 3. Render Text Layer to Overlay
-    // We use isPreview=false to disable guide lines.
-    // We use shouldClear=true to ensure transparent background.
-    // We force 'source-over' so shadows and text composite together into a single layer, just like they do on the transparent DOM canvas.
-    renderToContext(overlayCtx, finalCanvas.width, finalCanvas.height, false, true, 'source-over');
-
-    // 4. Composite Overlay onto Background with Blend Mode
-    finalCtx.save();
-    finalCtx.globalAlpha = 1.0; // Opacity is already handled in renderToContext
-    finalCtx.globalCompositeOperation = design.blendMode === 'normal' ? 'source-over' : design.blendMode as GlobalCompositeOperation;
-    finalCtx.drawImage(overlayCanvas, 0, 0);
-    finalCtx.restore();
+    // Use the unified rendering pipeline.
+    // We pass the newly loaded 'img' as an override so it renders consistently.
+    // 'shouldClear: true' will trigger drawing 'img' onto 'finalCanvas'.
+    renderToContext(finalCtx, finalCanvas.width, finalCanvas.height, false, true, undefined, img);
 
     return finalCanvas.toDataURL('image/png');
-  }, [imageSrc, renderToContext, design.blendMode]);
+  }, [imageSrc, renderToContext]);
 
   useImperativeHandle(ref, () => ({
     exportImage: generateExport,
@@ -845,43 +833,27 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
         };
     }
 
-    // Empty State Sizing Logic
     const [wStr, hStr] = design.aspectRatio.split(':');
     let w = parseFloat(wStr);
     let h = parseFloat(hStr);
     
-    // Normalize ratio logic
-    // The inputs are always "Landscape" ratios (Width >= Height) e.g. 16:9
-    // If Portrait is selected, we swap them to 9:16.
     if (design.orientation === 'portrait') {
        const temp = w; w = h; h = temp;
     }
     
     const numericRatio = w / h;
     const isPortrait = design.orientation === 'portrait';
-    
-    // THE GOLDEN RULE: The "Short Edge" of the Polaroid frame is fixed to 28rem (~448px).
-    // This ensures parity between Portrait and Landscape modes (just flipped dimensions).
     const SHORT_EDGE_SIZE = '28rem'; 
 
     let calculatedWidthConstraint;
-
     if (isPortrait) {
-        // Portrait: Width is the short edge.
         calculatedWidthConstraint = SHORT_EDGE_SIZE;
     } else {
-        // Landscape: Height is the short edge.
-        // Since AspectRatio = Width / Height => Width = Height * Ratio
         calculatedWidthConstraint = `calc(${SHORT_EDGE_SIZE} * ${numericRatio})`;
     }
-
-    // Viewport Height Constraint:
-    // We also don't want the frame to exceed 80% of the screen height.
-    // Width = Height * Ratio => MaxWidth = MaxHeight * Ratio
     const heightBasedWidthConstraint = `calc(80vh * ${numericRatio})`;
 
     return {
-        // Apply the tightest constraint
         width: `min(90%, ${calculatedWidthConstraint}, ${heightBasedWidthConstraint})`,
         aspectRatio: `${numericRatio}`,
         transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoomScale})`,
@@ -890,17 +862,16 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
   };
 
   const getContainerClass = () => {
-      // 1. Image Loaded State: Let image define intrinsic size, constrained by parent
       if (imageSrc) {
           return 'w-auto h-auto max-w-full max-h-full';
       }
-      return 'shadow-2xl'; // Just visual classes
+      return 'shadow-2xl'; 
   };
   
   // Cursor logic
   let cursorStyle = 'default';
-  if (design.isPathInputMode) cursorStyle = 'crosshair';
-  else if (design.isPathMoveMode) cursorStyle = 'move';
+  if (activeLayer?.isPathInputMode) cursorStyle = 'crosshair';
+  else if (activeLayer?.isPathMoveMode) cursorStyle = 'move';
   else if (interactionMode === 'GIZMO_ROTATE') cursorStyle = 'grabbing';
   else if (interactionMode === 'GIZMO_SCALE') {
       if (activeGizmoHandle === 'tr' || activeGizmoHandle === 'bl') {
@@ -914,7 +885,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
   else if (imageSrc) cursorStyle = 'grab';
 
   // --- Dynamic Styling for Gizmo ---
-  // Calculates inverse scale to keep handles constant visual size regardless of zoom
   const invScale = 1 / zoomScale;
   const cornerSize = 8 * invScale;
   const cornerOffset = -4 * invScale;
@@ -922,7 +892,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
   
   const rotHandleSize = 40 * invScale;
   const rotStemHeight = 32 * invScale;
-  // Offset to make the lollipop stem connect from bounding box (0) to handle bottom (-32)
   const rotHandleOffset = -rotStemHeight; 
 
   return (
@@ -957,13 +926,12 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
       >
         {imageSrc ? (
           <>
-            {/* Inner Wrapper for Visuals (Clipped) */}
             <div className="relative w-full h-full overflow-hidden rounded-[3px] shadow-2xl bg-neutral-900 flex items-center justify-center">
                 <img 
                   key={imageSrc} 
                   src={imageSrc} 
                   alt="Background" 
-                  className="max-w-full max-h-full object-contain pointer-events-none"
+                  className="max-w-full max-h-full object-contain pointer-events-none opacity-0" 
                   width={imgDims?.w}
                   height={imgDims?.h}
                 />
@@ -972,11 +940,11 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                     ref={textCanvasRef}
                     className={`absolute inset-0 w-full h-full pointer-events-none transition-opacity duration-150 ${imgDims ? 'opacity-100' : 'opacity-0'}`}
                     style={{ 
-                        mixBlendMode: (design.isPathInputMode || design.isPathMoveMode) ? 'normal' : design.blendMode as any 
+                        mixBlendMode: (activeLayer?.isPathInputMode || activeLayer?.isPathMoveMode) ? 'normal' : 'normal' 
                     }}
                 />
                 
-                {design.isPathInputMode && design.pathPoints.length === 0 && (
+                {activeLayer?.isPathInputMode && activeLayer.pathPoints.length === 0 && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div className="bg-black/50 backdrop-blur px-4 py-2 rounded-full text-white text-xs flex items-center gap-2 border border-white/10 animate-pulse">
                             <PenTool size={12} />
@@ -991,16 +959,16 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                 </div>
             </div>
 
-            {/* GIZMO OVERLAY (Outside Clipped Area) */}
-            {!design.isPathInputMode && design.pathPoints.length === 0 && imgDims && (
+            {/* GIZMO OVERLAY (Outside Clipped Area) - Only for Active Layer */}
+            {activeLayer && !activeLayer.isPathInputMode && activeLayer.pathPoints.length === 0 && imgDims && (
                 <div
                     className="absolute pointer-events-none group z-50"
                     style={{
-                        left: `${design.overlayPosition.x}%`,
-                        top: `${design.overlayPosition.y}%`,
+                        left: `${activeLayer.overlayPosition.x}%`,
+                        top: `${activeLayer.overlayPosition.y}%`,
                         width: textBounds.width,
                         height: textBounds.height,
-                        transform: `translate(-50%, -50%) rotate(${design.rotation}deg) scale(${design.flipX ? -1 : 1}, ${design.flipY ? -1 : 1})`,
+                        transform: `translate(-50%, -50%) rotate(${activeLayer.rotation}deg) scale(${activeLayer.flipX ? -1 : 1}, ${activeLayer.flipY ? -1 : 1})`,
                     }}
                 >
                     {/* The Bounding Box - Interactive Area */}

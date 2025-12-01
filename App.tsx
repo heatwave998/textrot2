@@ -1,50 +1,49 @@
-
 import React, { useState, useRef } from 'react';
 import Canvas, { CanvasHandle } from './components/Canvas';
 import Controls from './components/Controls';
 import SettingsModal from './components/SettingsModal';
 import ConfirmationModal from './components/ConfirmationModal';
-import { DesignState, AppSettings, AspectRatio, Orientation, Point } from './types';
+import { DesignState, AppSettings, AspectRatio, Orientation, Point, TextLayer } from './types';
 import { generateBackgroundImage, editImage } from './services/geminiService';
+import { useKeyboard, KeyboardShortcut } from './hooks/useKeyboard';
 
-// Initial State
-const DEFAULT_DESIGN: DesignState = {
-  prompt: '',
-  aspectRatio: '1:1',
-  orientation: 'landscape',
-  textOverlay: 'EDIT ME',
+// Helper to create a new layer
+const createLayer = (id: string, text: string = 'EDIT ME'): TextLayer => ({
+  id,
+  name: 'Text Layer',
+  visible: true,
+  locked: false,
+  textOverlay: text,
   fontFamily: 'Inter',
   textColor: '#FFFFFF',
   shadowColor: '#000000',
   textSize: 5,
-  letterSpacing: 0, // Default kerning
-  letterRotation: 0, // Default letter rotation
+  letterSpacing: 0,
+  letterRotation: 0,
   textAlign: 'center',
   overlayPosition: { x: 50, y: 50 },
   blendMode: 'normal',
   opacity: 1,
   
-  // Path
   pathPoints: [],
-  pathSmoothing: 5, // Default light smoothing
+  pathSmoothing: 5,
   isPathInputMode: false,
   isPathMoveMode: false,
 
-  // Blurs
   shadowBlur: 20,
   hasShadow: true,
   shadowOffset: 20,
   shadowAngle: 45,
-  // Modifiers
+  
   isBold: false,
   isItalic: false,
   isUppercase: false,
-  // Effects
+  
   isHollow: false,
   hasOutline: false,
   outlineWidth: 2,
   outlineColor: '#000000',
-  // Special FX
+  
   specialEffect: 'none',
   effectIntensity: 50,
   effectColor: '#FF0000',
@@ -53,10 +52,21 @@ const DEFAULT_DESIGN: DesignState = {
   rainbowOpacity: 1.0,
   rainbowBlur: 0,
   effectAngle: 90,
-  // Transforms
+  
   rotation: 360,
   flipX: false,
   flipY: false
+});
+
+const INITIAL_LAYER_ID = 'layer-1';
+
+// Initial State
+const DEFAULT_DESIGN: DesignState = {
+  prompt: '',
+  aspectRatio: '1:1',
+  orientation: 'landscape',
+  layers: [createLayer(INITIAL_LAYER_ID)],
+  activeLayerId: INITIAL_LAYER_ID
 };
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -102,7 +112,6 @@ export default function App() {
     setHistoryIndex(newHistory.length - 1);
     
     setImageSrc(newImageSrc);
-    // Note: We don't necessarily update design state here, the calling function usually handles that for new generations.
   };
 
   const handleUndo = () => {
@@ -113,14 +122,12 @@ export default function App() {
         setHistoryIndex(newIndex);
         setImageSrc(previousState.src);
         
-        // Restore associated design constraints
         setDesign(prev => ({
             ...prev,
             aspectRatio: previousState.aspectRatio,
             orientation: previousState.orientation,
-            pathPoints: [], // Clear paths on undo/redo to avoid mismatches
-            isPathInputMode: false,
-            isPathMoveMode: false
+            // We keep layers as is during image undo, but ensure no path mode is stuck
+            layers: prev.layers.map(l => ({ ...l, pathPoints: [], isPathInputMode: false, isPathMoveMode: false }))
         }));
     }
   };
@@ -137,9 +144,7 @@ export default function App() {
             ...prev,
             aspectRatio: nextState.aspectRatio,
             orientation: nextState.orientation,
-            pathPoints: [],
-            isPathInputMode: false,
-            isPathMoveMode: false
+            layers: prev.layers.map(l => ({ ...l, pathPoints: [], isPathInputMode: false, isPathMoveMode: false }))
         }));
       }
   };
@@ -156,18 +161,25 @@ export default function App() {
       addToHistory(imgData, design.aspectRatio, design.orientation);
       
       setDesign(prev => {
-        const isDefaultText = prev.textOverlay === DEFAULT_DESIGN.textOverlay;
-        return {
-            ...prev,
-            overlayPosition: { x: 50, y: 50 },
-            rotation: 360,
-            flipX: false,
-            flipY: false,
-            pathPoints: [], // Clear path on new gen
+        // Find existing text or reset? Let's reset the active layer text if it's default
+        const activeLayer = prev.layers.find(l => l.id === prev.activeLayerId);
+        const newText = (activeLayer && activeLayer.textOverlay === 'EDIT ME') 
+            ? design.prompt.substring(0, 20).toUpperCase() 
+            : (activeLayer?.textOverlay || 'EDIT ME');
+            
+        // Reset only the active layer transform, or keep composition?
+        // Let's keep composition but reset path modes
+        const newLayers = prev.layers.map(l => ({
+            ...l,
+            textOverlay: l.id === prev.activeLayerId ? newText : l.textOverlay,
+            pathPoints: [],
             isPathInputMode: false,
             isPathMoveMode: false,
-            textOverlay: isDefaultText ? design.prompt.substring(0, 20).toUpperCase() : prev.textOverlay,
-            letterRotation: 0, // Reset letter rotation
+        }));
+
+        return {
+            ...prev,
+            layers: newLayers
         };
       });
 
@@ -193,7 +205,6 @@ export default function App() {
       setIsGenerating(true);
       try {
           const editedImgData = await editImage(imageSrc, design.prompt);
-          // Edit maintains current aspect ratio and orientation
           addToHistory(editedImgData, design.aspectRatio, design.orientation);
       } catch (error) {
           alert("Failed to edit image. Ensure your API key is valid.");
@@ -205,37 +216,22 @@ export default function App() {
 
   const executeBlankCanvas = () => {
     const canvas = document.createElement('canvas');
-    
-    // Use standard "2K" / 1440p class resolutions for best balance of quality and performance.
     let width = 2048;
     let height = 2048;
 
     const ratio = design.aspectRatio;
     const isPortrait = design.orientation === 'portrait';
 
-    // Establish Base Dimensions (Landscape defaults)
     switch (ratio) {
-        case '1:1':
-            width = 2048; height = 2048;
-            break;
-        case '4:3':
-            width = 2048; height = 1536; 
-            break;
-        case '3:2':
-            width = 2160; height = 1440; 
-            break;
-        case '16:9':
-            width = 2560; height = 1440; // Standard QHD Landscape
-            break;
-        default:
-            width = 2048; height = 2048;
+        case '1:1': width = 2048; height = 2048; break;
+        case '4:3': width = 2048; height = 1536; break;
+        case '3:2': width = 2160; height = 1440; break;
+        case '16:9': width = 2560; height = 1440; break;
+        default: width = 2048; height = 2048;
     }
 
-    // Swap dimensions if Portrait (and not square) to ensure true portrait orientation
     if (isPortrait && ratio !== '1:1') {
-        const temp = width;
-        width = height;
-        height = temp;
+        const temp = width; width = height; height = temp;
     }
 
     canvas.width = width;
@@ -247,19 +243,11 @@ export default function App() {
     const blankImgData = canvas.toDataURL('image/png');
     addToHistory(blankImgData, design.aspectRatio, design.orientation);
     
+    const newId = crypto.randomUUID();
     setDesign(prev => ({
         ...prev,
-        textColor: '#FFFFFF',
-        shadowColor: '#000000',
-        isHollow: false,
-        blendMode: 'normal',
-        pathPoints: [],
-        isPathInputMode: false,
-        isPathMoveMode: false,
-        textOverlay: 'BLANK CANVAS',
-        letterRotation: 0,
-        rainbowOpacity: 1.0,
-        rainbowBlur: 0
+        layers: [createLayer(newId, 'BLANK CANVAS')],
+        activeLayerId: newId
     }));
     setIsBlankConfirmOpen(false);
   };
@@ -277,7 +265,6 @@ export default function App() {
   };
 
   const handleImageUpload = (file: File) => {
-    // 1. Size Limit Check (25MB)
     const MAX_SIZE = 25 * 1024 * 1024;
     if (file.size > MAX_SIZE) {
         alert("File is too large. Please upload an image smaller than 25MB.");
@@ -295,10 +282,8 @@ export default function App() {
             const height = img.naturalHeight;
             const imgRatio = width / height;
 
-            // Determine Orientation based on actual dimensions
             const newOrientation: Orientation = width >= height ? 'landscape' : 'portrait';
 
-            // Standard Ratios (Landscape values)
             const standards: { key: AspectRatio, val: number }[] = [
                 { key: '1:1', val: 1 },
                 { key: '4:3', val: 4/3 },
@@ -306,10 +291,7 @@ export default function App() {
                 { key: '16:9', val: 16/9 }
             ];
 
-            // Normalize for comparison (always >= 1)
             const normRatio = imgRatio >= 1 ? imgRatio : 1/imgRatio;
-
-            // Find closest standard ratio for UI display only
             let closestRatio: AspectRatio = '1:1';
             let minDiff = Infinity;
             
@@ -321,17 +303,13 @@ export default function App() {
                 }
             });
 
-            // Update State - No Cropping, accept image as is
             addToHistory(result, closestRatio, newOrientation);
             
             setDesign(prev => ({
                 ...prev,
                 aspectRatio: closestRatio,
                 orientation: newOrientation,
-                pathPoints: [],
-                isPathInputMode: false,
-                isPathMoveMode: false,
-                letterRotation: 0
+                layers: prev.layers.map(l => ({ ...l, pathPoints: [], isPathInputMode: false, isPathMoveMode: false }))
             }));
         };
         img.src = result;
@@ -344,8 +322,6 @@ export default function App() {
     if (canvasRef.current) {
       try {
         const dataUrl = await canvasRef.current.exportImage();
-        
-        // Convert Base64 to Blob for better large file handling
         const res = await fetch(dataUrl);
         const blob = await res.blob();
         const url = window.URL.createObjectURL(blob);
@@ -353,12 +329,9 @@ export default function App() {
         const link = document.createElement('a');
         link.download = `textrot-${Date.now()}.png`;
         link.href = url;
-        
-        // Append to body to ensure click works in all browsers (Firefox)
         document.body.appendChild(link);
         link.click();
         
-        // Cleanup
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
       } catch (e) {
@@ -371,14 +344,26 @@ export default function App() {
   const handlePathDrawn = (points: Point[]) => {
     setDesign(prev => ({
         ...prev,
-        pathPoints: points,
-        isPathInputMode: false // Auto-exit drawing mode after one stroke
+        layers: prev.layers.map(l => 
+            l.id === prev.activeLayerId 
+            ? { ...l, pathPoints: points, isPathInputMode: false }
+            : l
+        )
     }));
   };
 
   const handleDesignUpdate = (updates: Partial<DesignState>) => {
       setDesign(prev => ({ ...prev, ...updates }));
   };
+
+  // Setup Keyboard Shortcuts (Empty for now as requested)
+  // Example usage commented out:
+  // const shortcuts: KeyboardShortcut[] = [
+  //   { id: 'undo', combo: { key: 'z', ctrl: true }, action: handleUndo },
+  //   { id: 'redo', combo: { key: 'y', ctrl: true }, action: handleRedo }
+  // ];
+  const shortcuts: KeyboardShortcut[] = [];
+  useKeyboard(shortcuts);
 
   return (
     <div className="h-screen w-screen flex flex-col md:flex-row bg-black text-white">

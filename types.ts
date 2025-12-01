@@ -63,10 +63,11 @@ export interface Point {
   y: number;
 }
 
-export interface DesignState {
-  prompt: string;
-  aspectRatio: AspectRatio;
-  orientation: Orientation;
+export interface TextLayer {
+  id: string;
+  name: string;
+  visible: boolean;
+  locked: boolean;
 
   textOverlay: string;
   fontFamily: FontFamily;
@@ -117,6 +118,15 @@ export interface DesignState {
   rotation: number; // 0-360
   flipX: boolean;
   flipY: boolean;
+}
+
+export interface DesignState {
+  prompt: string;
+  aspectRatio: AspectRatio;
+  orientation: Orientation;
+  
+  layers: TextLayer[];
+  activeLayerId: string | null;
 }
 
 export interface AppSettings {
