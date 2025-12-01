@@ -682,20 +682,16 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
              const spread = offset * 3.0; // Extended offset range by 2.5x
              
              ctx.save();
-             // Do NOT use globalAlpha with filter, as it can be ignored or behave inconsistently.
-             // Instead, we bake opacity into the fillStyle color.
+             // Ensure composite operation allows layers to stack nicely
              ctx.globalCompositeOperation = 'source-over'; 
 
-             // Fix for blur: Use context filter + scale by resolution
-             // This ensures 10 units of blur looks consistent on 500px preview and 2000px export
+             // Fix for blur: Use shadowBlur fallback instead of context filter.
+             // This ensures reliable rendering of blurred text across all contexts.
              const blurScale = width / 1000;
              const blurAmount = design.rainbowBlur * blurScale;
-
-             // Apply Blur GLOBALLY for the rainbow block to ensure consistent rendering context state
-             // and better performance than toggling it per-layer.
-             if (blurAmount > 0) {
-                 ctx.filter = `blur(${blurAmount}px)`;
-             }
+             
+             // Constants for the shadow offset hack
+             const OFFSET_HACK = 20000;
 
              colors.forEach((c, i) => {
                  const mid = Math.floor(colors.length / 2); 
@@ -706,8 +702,29 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                  const rgb = hexToRgb(c);
                  const rgbaColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${design.rainbowOpacity})`;
                  
-                 // Draw the text with color override 'rgbaColor', forcing solid (forceHollow=false), disable outline for clean rainbow
-                 drawTextItem(rawText, dx, dy, rgbaColor, false, true);
+                 if (blurAmount > 0) {
+                     // Robust Blur using Shadow with Offset Hack
+                     // We move the context extremely far away, draw opaque text, 
+                     // and set shadow offset to bring the shadow back to the correct position.
+                     ctx.save();
+                     
+                     ctx.shadowColor = rgbaColor;
+                     ctx.shadowBlur = blurAmount;
+                     ctx.shadowOffsetX = OFFSET_HACK;
+                     ctx.shadowOffsetY = 0;
+                     
+                     // Move drawing context off-screen
+                     ctx.translate(-OFFSET_HACK, 0);
+
+                     // Draw OPAQUE text (black) so the shadow is fully generated.
+                     // The shadow receives the color from ctx.shadowColor.
+                     drawTextItem(rawText, dx, dy, '#000000', false, true);
+                     
+                     ctx.restore();
+                 } else {
+                     // Crisp text rendering
+                     drawTextItem(rawText, dx, dy, rgbaColor, false, true);
+                 }
              });
              
              ctx.restore();
