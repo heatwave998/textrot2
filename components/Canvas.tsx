@@ -180,9 +180,33 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
   // Handle mouse wheel zoom
   const handleWheel = (e: React.WheelEvent) => {
     if (!enableZoom || !imageSrc) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    
+    // Mouse position relative to the center of the container
+    const mouseX = e.clientX - centerX;
+    const mouseY = e.clientY - centerY;
+
     const scaleAmount = -e.deltaY * 0.001; 
-    const newScale = Math.min(Math.max(0.1, zoomScale + scaleAmount), 5); 
-    setZoomScale(newScale);
+    const nextScale = Math.min(Math.max(0.1, zoomScale + scaleAmount), 5); 
+    
+    // Only update pan if scale actually changes
+    if (nextScale !== zoomScale) {
+        // Calculate new pan so that the point under the mouse stays under the mouse
+        // M = Pan_old + P_img * Scale_old  =>  P_img = (M - Pan_old) / Scale_old
+        // M = Pan_new + P_img * Scale_new
+        // Pan_new = M - P_img * Scale_new
+        // Pan_new = M - (M - Pan_old) * (Scale_new / Scale_old)
+        
+        const scaleRatio = nextScale / zoomScale;
+        const newPanX = mouseX - (mouseX - pan.x) * scaleRatio;
+        const newPanY = mouseY - (mouseY - pan.y) * scaleRatio;
+
+        setPan({ x: newPanX, y: newPanY });
+        setZoomScale(nextScale);
+    }
   };
 
   // Helper to map screen event coordinates to Intrinsic Image Coordinates
