@@ -8,13 +8,15 @@ import {
   Monitor, Smartphone, AlignCenterHorizontal, PenTool, Trash2, Route,
   AlignLeft, AlignCenter, AlignRight, Move, Activity,
   Maximize, MoveHorizontal, MoveVertical, Undo2, Redo2, ToggleRight, ToggleLeft, Paintbrush,
-  Plus, Eye, EyeOff, ChevronUp, ChevronDown, Wand2, BoxSelect
+  Plus, Eye, EyeOff, ChevronUp, ChevronDown, Wand2, BoxSelect, BookType
 } from 'lucide-react';
 import SliderControl from './SliderControl';
 import EffectsControls from './EffectsControls';
 import ConfirmationModal from './ConfirmationModal';
+import FontBookModal from './FontBookModal';
 import CollapsibleSection from './CollapsibleSection';
 import { useIsKeyPressed } from '../hooks/useKeyboard';
+import { FONTS } from '../constants';
 
 interface ControlsProps {
   design: DesignState;
@@ -33,16 +35,6 @@ interface ControlsProps {
   vibeReasoning: string | null;
   hasImage: boolean;
 }
-
-const FONTS: FontFamily[] = [
-  'Abril Fatface', 'Alfa Slab One', 'Amatic SC', 'Anton', 'Audiowide', 'Bangers', 'Bebas Neue', 'Bodoni Moda', 'Bungee Shade', 'Butcherman', 'Cinzel',
-  'Cormorant Garamond', 'Creepster', 'Crimson Text', 'DM Serif Display', 'Dancing Script', 'Eater', 'Eduardo Tunni', 'Fascinate Inline', 'Finger Paint', 'Fira Code',
-  'Frijole', 'Gloria Hallelujah', 'Great Vibes', 'Inter', 'Italiana', 'Josefin Sans', 'Lato', 'League Gothic', 'Libre Baskerville',
-  'Lobster', 'Lora', 'Megrim', 'Merriweather', 'Metal Mania', 'Michroma', 'Monoton', 'Montserrat', 'Nosifer', 'Noto Sans', 'Open Sans', 'Orbitron', 'Oswald',
-  'PT Sans', 'PT Serif', 'Pacifico', 'Permanent Marker', 'Piedra', 'Plaster', 'Playfair Display', 'Poiret One', 'Poppins', 'Press Start 2P', 'Quantico', 'Raleway', 'Righteous',
-  'Roboto', 'Rock Salt', 'Rubik Beastly', 'Rubik Glitch', 'Rye', 'Sancreek', 'Shadows Into Light', 'Shojumaru', 'Source Sans 3', 'Space Grotesque', 'Space Mono', 'Special Elite', 'Syne',
-  'Turret Road', 'Unbounded', 'UnifrakturMaguntia', 'VT323', 'Wallpoet', 'Zen Dots'
-];
 
 const RATIOS: AspectRatio[] = ['1:1', '4:3', '3:2', '16:9'];
 
@@ -64,6 +56,7 @@ const Controls: React.FC<ControlsProps> = ({
 }) => {
   const [layerToDelete, setLayerToDelete] = useState<string | null>(null);
   const [hoveredControl, setHoveredControl] = useState<string | null>(null);
+  const [isFontBookOpen, setIsFontBookOpen] = useState(false);
 
   // Keyboard States
   const isShiftPressed = useIsKeyPressed('Shift');
@@ -387,14 +380,25 @@ const Controls: React.FC<ControlsProps> = ({
 
           {/* Typography */}
           <CollapsibleSection title="Typography" icon={Palette} defaultOpen={true}>
-            <select 
-              className="w-full bg-neutral-950 border border-neutral-800 rounded-[3px] p-2 text-lg outline-none"
-              value={activeLayer.fontFamily}
-              onChange={(e) => updateLayer('fontFamily', e.target.value)}
-              style={{ fontFamily: activeLayer.fontFamily }}
+            
+            {/* Font Book Button */}
+            <button 
+                onClick={() => setIsFontBookOpen(true)}
+                className="w-full bg-neutral-950 border border-neutral-800 rounded-[3px] p-2 text-left flex items-center justify-between hover:border-neutral-600 transition-colors group mb-3"
             >
-              {FONTS.map(f => <option key={f} value={f} style={{ fontFamily: f }}>{f}</option>)}
-            </select>
+                <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-[2px] bg-neutral-900 flex items-center justify-center text-lg font-bold text-white border border-neutral-800 group-hover:border-neutral-600 transition-colors">
+                        Aa
+                    </div>
+                    <div>
+                        <span className="block text-xs text-neutral-500 font-medium">Font Family</span>
+                        <span className="block text-sm text-white" style={{ fontFamily: activeLayer.fontFamily }}>
+                            {activeLayer.fontFamily}
+                        </span>
+                    </div>
+                </div>
+                <BookType size={16} className="text-neutral-600 group-hover:text-white transition-colors" />
+            </button>
 
             <div className="flex gap-1 bg-neutral-950 rounded-[6px] p-1 border border-neutral-800">
                 <button onClick={() => toggleLayer('isBold')} className={`flex-1 h-10 rounded-[3px] hover:bg-neutral-800 flex items-center justify-center ${activeLayer.isBold ? 'bg-neutral-800 text-pink-500' : 'text-neutral-400'}`}><Bold size={18} strokeWidth={3} /></button>
@@ -603,6 +607,15 @@ const Controls: React.FC<ControlsProps> = ({
         title="Delete Layer"
         message="Are you sure you want to delete this layer? This action cannot be undone."
       />
+      
+      {activeLayer && (
+        <FontBookModal 
+            isOpen={isFontBookOpen}
+            onClose={() => setIsFontBookOpen(false)}
+            onSelect={(font) => updateLayer('fontFamily', font)}
+            currentFont={activeLayer.fontFamily}
+        />
+      )}
     </div>
   );
 };
