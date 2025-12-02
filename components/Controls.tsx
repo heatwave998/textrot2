@@ -123,6 +123,7 @@ const Controls: React.FC<ControlsProps> = ({
         hasShadow: true,
         shadowOffset: 20,
         shadowAngle: 45,
+        shadowOpacity: 1.0,
         isBold: false,
         isItalic: false,
         isUppercase: false,
@@ -435,38 +436,6 @@ const Controls: React.FC<ControlsProps> = ({
             </div>
           </CollapsibleSection>
 
-          {/* Transform */}
-          <CollapsibleSection title="Transform" icon={Move} defaultOpen={false}>
-            <div className="grid grid-cols-2 gap-4">
-                <SliderControl label="X Pos" icon={MoveHorizontal} value={activeLayer.overlayPosition.x} setValue={(v) => updatePosition('x', v)} min="0" max="100" step="1" suffix="%" defaultValue={50} />
-                <SliderControl label="Y Pos" icon={MoveVertical} value={100 - activeLayer.overlayPosition.y} setValue={(v) => updatePosition('y', 100 - v)} min="0" max="100" step="1" suffix="%" defaultValue={50} />
-            </div>
-
-            <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-[10px] text-neutral-500 flex items-center gap-1.5"><RotateCw size={12} />Rotation</label>
-                      <span className="text-[10px] text-neutral-500 font-mono">{Math.round(activeLayer.rotation)}°</span>
-                  </div>
-                  <div className="relative flex items-center h-5">
-                      <input 
-                          type="range" min="0" max="360" step="1" value={Math.round(activeLayer.rotation)}
-                          onChange={(e) => {
-                              let val = parseInt(e.target.value);
-                              const snapPoints = [0, 90, 180, 270, 360];
-                              for (const point of snapPoints) if (Math.abs(val - point) <= 15) { val = point; break; }
-                              updateLayer('rotation', val);
-                          }}
-                          onDoubleClick={() => updateLayer('rotation', 0)}
-                          className="relative z-10 w-full h-1.5 bg-neutral-800 rounded-full appearance-none cursor-pointer accent-white block focus:outline-none hover:bg-neutral-700 transition-colors"
-                          title="Double-click to reset"
-                      />
-                      <div className="absolute inset-0 flex items-center pointer-events-none z-20">
-                         {[90, 180, 270].map(deg => <div key={deg} className={`absolute w-1 h-1 rounded-full -translate-x-1/2 transition-all duration-300 ${activeLayer.rotation === deg ? 'bg-pink-500 w-2 h-2' : 'bg-neutral-600'}`} style={{ left: `${(deg/360)*100}%` }} />)}
-                      </div>
-                  </div>
-            </div>
-          </CollapsibleSection>
-
           {/* Appearance */}
           <CollapsibleSection title="Appearance" icon={Palette} defaultOpen={false}>
             <div className="grid grid-cols-2 gap-2">
@@ -496,6 +465,39 @@ const Controls: React.FC<ControlsProps> = ({
                 <SliderControl label="Shadow Blur" value={activeLayer.shadowBlur} setValue={(v) => updateLayer('shadowBlur', v)} min="0" max="100" step="1" defaultValue={20} />
                 <SliderControl label="Shadow Offset" value={activeLayer.shadowOffset} setValue={(v) => updateLayer('shadowOffset', v)} min="0" max="100" step="1" defaultValue={20} />
                 <SliderControl label="Shadow Angle" value={activeLayer.shadowAngle} setValue={(v) => updateLayer('shadowAngle', v)} min="0" max="360" step="1" suffix="°" defaultValue={45} />
+                <SliderControl label="Shadow Opacity" value={(activeLayer.shadowOpacity ?? 1.0) * 100} setValue={(v) => updateLayer('shadowOpacity', v / 100)} min="0" max="100" step="1" suffix="%" defaultValue={100} />
+            </div>
+          </CollapsibleSection>
+
+          {/* Transform */}
+          <CollapsibleSection title="Transform" icon={Move} defaultOpen={false}>
+            <div className="grid grid-cols-2 gap-4">
+                <SliderControl label="X Pos" icon={MoveHorizontal} value={activeLayer.overlayPosition.x} setValue={(v) => updatePosition('x', v)} min="0" max="100" step="1" suffix="%" defaultValue={50} />
+                <SliderControl label="Y Pos" icon={MoveVertical} value={100 - activeLayer.overlayPosition.y} setValue={(v) => updatePosition('y', 100 - v)} min="0" max="100" step="1" suffix="%" defaultValue={50} />
+            </div>
+
+            <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-[10px] text-neutral-500 flex items-center gap-1.5"><RotateCw size={12} />Rotation</label>
+                      <span className="text-[10px] text-neutral-500 font-mono">{Math.round(activeLayer.rotation)}°</span>
+                  </div>
+                  <div className="relative flex items-center h-5">
+                      <input 
+                          type="range" min="0" max="360" step="1" value={Math.round(activeLayer.rotation)}
+                          onChange={(e) => {
+                              let val = parseInt(e.target.value);
+                              const snapPoints = [0, 90, 180, 270, 360];
+                              for (const point of snapPoints) if (Math.abs(val - point) <= 15) { val = point; break; }
+                              updateLayer('rotation', val);
+                          }}
+                          onDoubleClick={() => updateLayer('rotation', 0)}
+                          className="relative z-10 w-full h-1.5 bg-neutral-800 rounded-full appearance-none cursor-pointer accent-white block focus:outline-none hover:bg-neutral-700 transition-colors"
+                          title="Double-click to reset"
+                      />
+                      <div className="absolute inset-0 flex items-center pointer-events-none z-20">
+                         {[90, 180, 270].map(deg => <div key={deg} className={`absolute w-1 h-1 rounded-full -translate-x-1/2 transition-all duration-300 ${activeLayer.rotation === deg ? 'bg-pink-500 w-2 h-2' : 'bg-neutral-600'}`} style={{ left: `${(deg/360)*100}%` }} />)}
+                      </div>
+                  </div>
             </div>
           </CollapsibleSection>
 

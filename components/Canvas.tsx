@@ -28,6 +28,12 @@ const hexToRgb = (hex: string) => {
   } : { r: 0, g: 0, b: 0 };
 };
 
+// Helper: Hex to RGBA
+const hexToRgba = (hex: string, alpha: number) => {
+    const rgb = hexToRgb(hex);
+    return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+};
+
 // Helper: Interpolate Colors
 const interpolateColor = (c1: string, c2: string, t: number) => {
     const rgb1 = hexToRgb(c1);
@@ -120,6 +126,9 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
   const textCanvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   
+  // Scratch canvas for offscreen composition
+  const scratchCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  
   // Store the actual loaded image for rendering onto canvas
   const bgImageRef = useRef<HTMLImageElement | null>(null);
 
@@ -141,6 +150,19 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
   const [textBounds, setTextBounds] = useState({ width: 0, height: 0 });
 
   const activeLayer = design.layers.find(l => l.id === design.activeLayerId);
+
+  // Helper to lazily get or create scratch canvas
+  const getScratchCanvas = (width: number, height: number) => {
+      if (!scratchCanvasRef.current) {
+          scratchCanvasRef.current = document.createElement('canvas');
+      }
+      const canvas = scratchCanvasRef.current;
+      if (canvas.width !== width || canvas.height !== height) {
+          canvas.width = width;
+          canvas.height = height;
+      }
+      return canvas;
+  };
 
   // Reset zoom and get dims when the image changes
   useEffect(() => {
@@ -195,11 +217,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
     // Only update pan if scale actually changes
     if (nextScale !== zoomScale) {
         // Calculate new pan so that the point under the mouse stays under the mouse
-        // M = Pan_old + P_img * Scale_old  =>  P_img = (M - Pan_old) / Scale_old
-        // M = Pan_new + P_img * Scale_new
-        // Pan_new = M - P_img * Scale_new
-        // Pan_new = M - (M - Pan_old) * (Scale_new / Scale_old)
-        
         const scaleRatio = nextScale / zoomScale;
         const newPanX = mouseX - (mouseX - pan.x) * scaleRatio;
         const newPanY = mouseY - (mouseY - pan.y) * scaleRatio;
@@ -401,13 +418,14 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
 
 
   // --- Core Rendering Logic ---
-  const renderLayer = (
+  // Renders the visual content of the layer (Text, Path, Effects) to the given context.
+  // This does NOT handle Shadow application; shadow is handled via composition in renderToContext.
+  const renderLayerVisuals = (
       ctx: CanvasRenderingContext2D,
       layer: TextLayer,
       width: number,
       height: number,
-      isPreview: boolean,
-      overrideBlendMode?: GlobalCompositeOperation
+      isPreview: boolean
   ) => {
     if (!layer.visible) return;
 
@@ -416,10 +434,8 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
     // Set Base Context State
     ctx.filter = 'none';
     ctx.globalAlpha = 1.0;
+    // We use source-over for the scratch buffer always
     ctx.globalCompositeOperation = 'source-over';
-
-    // Allow blend modes in preview, unless specifically overridden
-    const effectiveBlendMode = overrideBlendMode || (layer.blendMode === 'normal' ? 'source-over' : layer.blendMode);
 
     const activePointsRaw = (interactionMode === 'DRAW_PATH' && isActive) ? currentPathRef.current : layer.pathPoints;
     const activePoints = (interactionMode === 'DRAW_PATH' && isActive) ? activePointsRaw : getSmoothedPoints(activePointsRaw, layer.pathSmoothing);
@@ -493,7 +509,14 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
         normalModeFillStyle = grad;
     }
 
-    const drawTextItem = (text: string, offsetX: number, offsetY: number, colorOverride?: string, forceHollow?: boolean, disableOutline: boolean = false) => {
+    const drawTextItem = (
+        text: string, 
+        offsetX: number, 
+        offsetY: number, 
+        colorOverride?: string, 
+        forceHollow?: boolean, 
+        disableOutline: boolean = false
+    ) => {
         const isHollow = forceHollow !== undefined ? forceHollow : layer.isHollow;
         const shouldDrawOutline = !disableOutline && layer.hasOutline;
 
@@ -545,9 +568,13 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                     const yFinal = yBase - Math.cos(angle) * normalOffset; 
                     
                     const letterRotRad = (layer.letterRotation * Math.PI) / 180;
+                    const totalRotation = angle + letterRotRad;
+
+                    // Per-character isolation
+                    ctx.save(); 
 
                     ctx.translate(xFinal, yFinal);
-                    ctx.rotate(angle + letterRotRad);
+                    ctx.rotate(totalRotation);
                     
                     let activeFill = colorOverride || layer.textColor;
                     if (!colorOverride && layer.specialEffect === 'gradient' && !isHollow) {
@@ -570,8 +597,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                          }
                     }
 
-                    ctx.rotate(-(angle + letterRotRad));
-                    ctx.translate(-xFinal, -yFinal);
+                    ctx.restore();
                 }
                 currentDist += charWidth + scaledLetterSpacing;
             }
@@ -582,7 +608,11 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
             
             ctx.translate(xPos, yPos);
             
-            if (layer.rotation !== 0) ctx.rotate((layer.rotation * Math.PI) / 180);
+            // Standard Rotation
+            const mainRotation = layer.rotation;
+            const mainRotationRad = (mainRotation * Math.PI) / 180;
+            if (mainRotation !== 0) ctx.rotate(mainRotationRad);
+            
             const sX = layer.flipX ? -1 : 1;
             const sY = layer.flipY ? -1 : 1;
             if (sX !== 1 || sY !== 1) ctx.scale(sX, sY);
@@ -608,16 +638,18 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                 let currentAdvance = startX + offsetX;
                 chars.forEach((char, idx) => {
                     const charW = ctx.measureText(char).width;
+                    const letterRotRad = (layer.letterRotation * Math.PI) / 180;
                     
                     const isRotated = layer.letterRotation !== 0;
-                    if (isRotated) {
-                        const centerX = currentAdvance + charW / 2;
-                        const centerY = lineY; 
-                        ctx.save();
-                        ctx.translate(centerX, centerY);
-                        ctx.rotate((layer.letterRotation * Math.PI) / 180);
-                        ctx.translate(-centerX, -centerY);
-                    }
+                    
+                    ctx.save();
+                    
+                    const centerX = currentAdvance + charW / 2;
+                    const centerY = lineY; 
+                    
+                    ctx.translate(centerX, centerY);
+                    if (isRotated) ctx.rotate(letterRotRad);
+                    ctx.translate(-centerX, -centerY);
 
                     if (isHollow) {
                         ctx.lineWidth = layer.hasOutline ? layer.outlineWidth : 2; 
@@ -634,53 +666,29 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                         }
                     }
 
-                    if (isRotated) {
-                        ctx.restore();
-                    }
+                    ctx.restore();
 
                     currentAdvance += charW + scaledLetterSpacing;
                 });
             });
 
-            if (sX !== 1 || sY !== 1) ctx.scale(sX, sY);
-            if (layer.rotation !== 0) ctx.rotate(-(layer.rotation * Math.PI) / 180);
-            ctx.translate(-xPos, -yPos);
+            // Restores happen automatically via outer ctx.restore() 
         }
 
         ctx.restore();
     };
 
 
-    // 1. Shadow Pass
-    if (layer.hasShadow) {
-        ctx.save();
-        ctx.globalAlpha = layer.opacity; 
-        ctx.globalCompositeOperation = effectiveBlendMode as GlobalCompositeOperation;
-        ctx.shadowColor = layer.shadowColor;
-        ctx.shadowBlur = (layer.shadowBlur / 100) * (fontSize * 2);
-        
-        const shadowRad = (layer.shadowAngle * Math.PI) / 180;
-        const shadowDist = (layer.shadowOffset / 100) * fontSize;
-        const sx = Math.cos(shadowRad) * shadowDist;
-        const sy = Math.sin(shadowRad) * shadowDist;
-        
-        const OFFSET_HACK = 20000;
-        ctx.translate(-OFFSET_HACK, 0);
-        ctx.shadowOffsetX = sx + OFFSET_HACK;
-        ctx.shadowOffsetY = sy;
-        
-        drawTextItem(rawText, 0, 0, layer.isHollow ? undefined : layer.textColor, layer.isHollow);
-        ctx.restore();
-    }
-
-    // 2. Special Effects
+    // 1. Special Effects
     if (layer.specialEffect === 'echo') {
         const echoCount = 5;
-        const startOpacity = layer.opacity;
+        const startOpacity = 1.0;
         const angleRad = (layer.effectAngle * Math.PI) / 180;
         const distanceStep = layer.effectIntensity * (width * 0.0005); 
 
-        ctx.globalCompositeOperation = effectiveBlendMode as GlobalCompositeOperation;
+        // We render echoes on the scratch canvas. 
+        // Note: Global alpha of the layer is applied later during composition.
+        // Here we just control relative opacity of echoes.
         for (let i = echoCount; i > 0; i--) {
              const dx = Math.cos(angleRad) * distanceStep * i;
              const dy = Math.sin(angleRad) * distanceStep * i;
@@ -734,27 +742,23 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
             ctx.save();
             ctx.globalAlpha = 1.0; 
             ctx.globalCompositeOperation = 'screen'; 
-            ctx.shadowColor = c1;
-            ctx.shadowBlur = 5;
-            ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
             drawTextItem(rawText, -offset, 0, c1, false);
             ctx.restore();
 
             ctx.save();
             ctx.globalAlpha = 1.0; 
             ctx.globalCompositeOperation = 'screen';
-            ctx.shadowColor = c2;
-            ctx.shadowBlur = 5;
-            ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
             drawTextItem(rawText, offset, 0, c2, false); 
             ctx.restore();
         }
     }
 
-    // 3. Main Text Pass
+    // 2. Main Text Pass
     ctx.save();
-    ctx.globalAlpha = layer.opacity;
-    ctx.globalCompositeOperation = effectiveBlendMode as GlobalCompositeOperation;
+    ctx.globalAlpha = 1.0;
+    // We are drawing onto a clean scratch canvas, so blend modes inside the text itself (like gradient) work.
+    // The layer-wide blend mode is applied during composition.
+    ctx.globalCompositeOperation = 'source-over';
     drawTextItem(rawText, 0, 0, undefined, undefined); 
     ctx.restore();
   };
@@ -771,21 +775,65 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
       if (!ctx) return;
       
       const bgImg = overrideBgImage || bgImageRef.current;
+      const scratch = getScratchCanvas(width, height);
+      const scratchCtx = scratch.getContext('2d');
+      if (!scratchCtx) return;
 
       if (shouldClear) {
-          // KEY CHANGE: Draw the background image onto the canvas if available.
-          // This allows standard globalCompositeOperation to blend with the background pixels.
           if (bgImg) {
-              ctx.clearRect(0, 0, width, height); // Safety clear
+              ctx.clearRect(0, 0, width, height); 
               ctx.drawImage(bgImg, 0, 0, width, height);
           } else {
               ctx.clearRect(0, 0, width, height);
           }
       }
 
-      // Render all visible layers
+      // Render Pipeline:
+      // 1. Render Layer to Offscreen Buffer (Scratch Canvas)
+      // 2. Draw Offscreen Buffer to Main Canvas (with Shadow & Opacity)
       design.layers.forEach(layer => {
-          renderLayer(ctx, layer, width, height, isPreview, overrideBlendMode);
+          if (!layer.visible) return;
+
+          // A. CLEAR SCRATCH
+          scratchCtx.clearRect(0, 0, width, height);
+          
+          // B. RENDER VISUALS TO SCRATCH
+          // We pass isPreview to draw path lines if selected
+          renderLayerVisuals(scratchCtx, layer, width, height, isPreview);
+
+          // C. COMPOSITE TO MAIN
+          ctx.save();
+          // Reset Transform to Identity to ensure shadows are applied in Screen Space (Global)
+          // This prevents rotation/scale from distorting the shadow vector.
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+
+          // Apply Layer Blending
+          const effectiveBlendMode = overrideBlendMode || (layer.blendMode === 'normal' ? 'source-over' : layer.blendMode);
+          ctx.globalAlpha = layer.opacity;
+          ctx.globalCompositeOperation = effectiveBlendMode as GlobalCompositeOperation;
+
+          // Apply Shadow
+          if (layer.hasShadow) {
+              // Calculate screen-space offsets based on global angle
+              const angleRad = (layer.shadowAngle * Math.PI) / 180;
+              const fontSize = (layer.textSize / 100) * width;
+              // Normalize dist to be consistent with previous logic
+              const dist = (layer.shadowOffset / 100) * fontSize;
+              
+              const sx = dist * Math.cos(angleRad);
+              const sy = dist * Math.sin(angleRad);
+
+              const sAlpha = (layer.shadowOpacity ?? 1);
+              ctx.shadowColor = hexToRgba(layer.shadowColor, sAlpha);
+              ctx.shadowBlur = (layer.shadowBlur / 100) * (fontSize * 2);
+              ctx.shadowOffsetX = sx;
+              ctx.shadowOffsetY = sy;
+          }
+
+          // Draw the rasterized layer onto the main canvas
+          ctx.drawImage(scratch, 0, 0);
+          
+          ctx.restore();
       });
 
   }, [design.layers, interactionMode, design.activeLayerId]);
@@ -822,8 +870,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
     finalCanvas.height = img.naturalHeight;
 
     // Use the unified rendering pipeline.
-    // We pass the newly loaded 'img' as an override so it renders consistently.
-    // 'shouldClear: true' will trigger drawing 'img' onto 'finalCanvas'.
     renderToContext(finalCtx, finalCanvas.width, finalCanvas.height, false, true, undefined, img);
 
     return finalCanvas.toDataURL('image/png');

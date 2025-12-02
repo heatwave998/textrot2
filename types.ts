@@ -92,6 +92,7 @@ export interface TextLayer {
   hasShadow: boolean;
   shadowOffset: number; // 0-100
   shadowAngle: number; // 0-360
+  shadowOpacity: number; // 0-1
 
   // Typography Modifiers
   isBold: boolean;

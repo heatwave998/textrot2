@@ -1,3 +1,4 @@
+
 import React, { useState, useRef } from 'react';
 import Canvas, { CanvasHandle } from './components/Canvas';
 import Controls from './components/Controls';
@@ -34,6 +35,7 @@ const createLayer = (id: string, text: string = 'EDIT ME'): TextLayer => ({
   hasShadow: true,
   shadowOffset: 20,
   shadowAngle: 45,
+  shadowOpacity: 1.0,
   
   isBold: false,
   isItalic: false,
