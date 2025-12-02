@@ -69,6 +69,26 @@ const getSmoothedPoints = (points: Point[], iterations: number): Point[] => {
     return currentPoints;
 };
 
+// Helper: Get Bounds of a Path
+const getPathBounds = (points: Point[]) => {
+    if (points.length === 0) return { x: 0, y: 0, width: 0, height: 0, cx: 0, cy: 0 };
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    points.forEach(p => {
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+    });
+    return {
+        x: minX,
+        y: minY,
+        width: maxX - minX,
+        height: maxY - minY,
+        cx: (minX + maxX) / 2,
+        cy: (minY + maxY) / 2
+    };
+};
+
 // Helper: Get text metrics (Tight Ink Bounds)
 const measureLineMetrics = (ctx: CanvasRenderingContext2D, text: string, letterSpacing: number) => {
     const chars = text.split('');
@@ -148,8 +168,27 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
   
   // Metrics for Gizmo
   const [textBounds, setTextBounds] = useState({ width: 0, height: 0 });
+  // Visual Scale (Screen pixels per Intrinsic pixel)
+  const [visualScale, setVisualScale] = useState(1);
 
   const activeLayer = design.layers.find(l => l.id === design.activeLayerId);
+
+  // Update Visual Scale on resize/load
+  useEffect(() => {
+     if (containerRef.current && imgDims) {
+         // Create a ResizeObserver to update visual scale if container changes
+         const observer = new ResizeObserver(() => {
+              if (containerRef.current && imgDims.w > 0) {
+                 // The displayed width of the image element (approximate via container)
+                 // NOTE: Since img is max-w-full, we check the container or the img element if possible.
+                 // For now, container width is a good proxy in this layout.
+                 setVisualScale(containerRef.current.offsetWidth / imgDims.w);
+              }
+         });
+         observer.observe(containerRef.current);
+         return () => observer.disconnect();
+     }
+  }, [imgDims]);
 
   // Helper to lazily get or create scratch canvas
   const getScratchCanvas = (width: number, height: number) => {
@@ -257,7 +296,11 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
       if (handleType && activeLayer) {
           e.preventDefault();
           e.stopPropagation();
-          initialLayerRef.current = { ...activeLayer };
+          initialLayerRef.current = { ...activeLayer }; // Deep clone needed for pathPoints? Spread is shallow.
+          // For pathPoints, we need to clone the array
+          if (activeLayer.pathPoints) {
+              initialLayerRef.current.pathPoints = [...activeLayer.pathPoints];
+          }
           dragStartRef.current = { x: e.clientX, y: e.clientY };
 
           if (handleType === 'rotate') {
@@ -281,16 +324,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
           return;
       }
 
-      if (activeLayer?.isPathMoveMode && activeLayer.pathPoints.length > 0) {
-          e.preventDefault();
-          e.stopPropagation();
-          setInteractionMode('MOVE_PATH');
-          initialLayerRef.current = { ...activeLayer }; // Store points snapshot
-          dragStartRef.current = { x: coords.x, y: coords.y }; // Use intrinsic for path move
-          return;
-      }
-
-      // 3. Panning (Default Left Click)
+      // Standard Panning (Default Left Click)
       if (enableZoom && e.button === 0) {
           setInteractionMode('PAN');
           dragStartRef.current = {
@@ -312,22 +346,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
           return;
       }
 
-      if (interactionMode === 'MOVE_PATH') {
-           if (!coords || !initialLayerRef.current) return;
-           e.preventDefault();
-           
-           const dx = coords.x - dragStartRef.current.x;
-           const dy = coords.y - dragStartRef.current.y;
-           
-           const newPoints = initialLayerRef.current.pathPoints.map(p => ({
-               x: p.x + dx,
-               y: p.y + dy
-           }));
-           
-           onPathDrawn(newPoints);
-           return;
-      }
-
       if (interactionMode === 'PAN') {
           e.preventDefault();
           setPan({
@@ -343,6 +361,72 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
           if (!initialLayerRef.current || !activeLayer) return;
 
           const startLayer = initialLayerRef.current;
+          
+          // PATH MODE TRANSFORM
+          if (activeLayer.isPathMoveMode && startLayer.pathPoints.length > 0) {
+               const points = startLayer.pathPoints;
+               const bounds = getPathBounds(points);
+               const cx = bounds.cx;
+               const cy = bounds.cy;
+
+               // Calculate delta in intrinsic pixels
+               const rect = containerRef.current!.getBoundingClientRect();
+               const scaleFactor = imgDims.w / rect.width;
+               
+               let newPoints = [...points];
+
+               if (interactionMode === 'GIZMO_MOVE') {
+                   const dxScreen = e.clientX - dragStartRef.current.x;
+                   const dyScreen = e.clientY - dragStartRef.current.y;
+                   const dx = dxScreen * scaleFactor;
+                   const dy = dyScreen * scaleFactor;
+
+                   newPoints = points.map(p => ({ x: p.x + dx, y: p.y + dy }));
+               } 
+               else if (interactionMode === 'GIZMO_SCALE') {
+                   // Visual Center on screen
+                   // We need the screen coordinates of the center point (cx, cy)
+                   // cx is intrinsic.
+                   const screenCx = rect.left + (cx / imgDims.w) * rect.width;
+                   const screenCy = rect.top + (cy / imgDims.h) * rect.height;
+
+                   const startDist = Math.hypot(dragStartRef.current.x - screenCx, dragStartRef.current.y - screenCy);
+                   const currDist = Math.hypot(e.clientX - screenCx, e.clientY - screenCy);
+                   const ratio = currDist / (startDist || 1);
+
+                   newPoints = points.map(p => ({
+                       x: cx + (p.x - cx) * ratio,
+                       y: cy + (p.y - cy) * ratio
+                   }));
+               }
+               else if (interactionMode === 'GIZMO_ROTATE') {
+                   const screenCx = rect.left + (cx / imgDims.w) * rect.width;
+                   const screenCy = rect.top + (cy / imgDims.h) * rect.height;
+
+                   const startAngle = Math.atan2(dragStartRef.current.y - screenCy, dragStartRef.current.x - screenCx);
+                   const currAngle = Math.atan2(e.clientY - screenCy, e.clientX - screenCx);
+                   let deltaAngle = currAngle - startAngle;
+
+                   // Snap to 15 degrees if Shift
+                   if (e.shiftKey) {
+                       // Logic for snap is tricky with delta. 
+                       // Simplified: just use raw delta.
+                   }
+
+                   const cos = Math.cos(deltaAngle);
+                   const sin = Math.sin(deltaAngle);
+
+                   newPoints = points.map(p => ({
+                       x: cx + (p.x - cx) * cos - (p.y - cy) * sin,
+                       y: cy + (p.x - cx) * sin + (p.y - cy) * cos
+                   }));
+               }
+
+               onPathDrawn(newPoints);
+               return;
+          }
+
+          // STANDARD TEXT TRANSFORM
           const updatedLayers = design.layers.map(l => {
               if (l.id !== activeLayer.id) return l;
 
@@ -775,49 +859,44 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
       if (!ctx) return;
       
       const bgImg = overrideBgImage || bgImageRef.current;
+      
+      // We use a scratch canvas to bake the layer's transform and effects (like curvature).
+      // This allows us to apply the drop shadow in "Screen Space" (Global) rather than "Layer Space" (Local).
+      // This prevents the shadow from rotating with the text, which is the "flying off" issue.
       const scratch = getScratchCanvas(width, height);
       const scratchCtx = scratch.getContext('2d');
       if (!scratchCtx) return;
 
       if (shouldClear) {
+          ctx.clearRect(0, 0, width, height);
           if (bgImg) {
-              ctx.clearRect(0, 0, width, height); 
               ctx.drawImage(bgImg, 0, 0, width, height);
-          } else {
-              ctx.clearRect(0, 0, width, height);
           }
       }
 
-      // Render Pipeline:
-      // 1. Render Layer to Offscreen Buffer (Scratch Canvas)
-      // 2. Draw Offscreen Buffer to Main Canvas (with Shadow & Opacity)
       design.layers.forEach(layer => {
           if (!layer.visible) return;
 
-          // A. CLEAR SCRATCH
+          // 1. Clear Scratch
           scratchCtx.clearRect(0, 0, width, height);
           
-          // B. RENDER VISUALS TO SCRATCH
-          // We pass isPreview to draw path lines if selected
+          // 2. Render Layer to Scratch (Local Transforms applied here)
           renderLayerVisuals(scratchCtx, layer, width, height, isPreview);
 
-          // C. COMPOSITE TO MAIN
+          // 3. Composite Scratch to Main (Identity Transform)
           ctx.save();
-          // Reset Transform to Identity to ensure shadows are applied in Screen Space (Global)
-          // This prevents rotation/scale from distorting the shadow vector.
-          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          ctx.setTransform(1, 0, 0, 1, 0, 0); // Identity transform
 
-          // Apply Layer Blending
+          // Apply Blend Mode
           const effectiveBlendMode = overrideBlendMode || (layer.blendMode === 'normal' ? 'source-over' : layer.blendMode);
           ctx.globalAlpha = layer.opacity;
           ctx.globalCompositeOperation = effectiveBlendMode as GlobalCompositeOperation;
 
-          // Apply Shadow
+          // Apply Screen-Space Shadow
           if (layer.hasShadow) {
-              // Calculate screen-space offsets based on global angle
               const angleRad = (layer.shadowAngle * Math.PI) / 180;
               const fontSize = (layer.textSize / 100) * width;
-              // Normalize dist to be consistent with previous logic
+              // Shadow distance relative to font size ensures consistency
               const dist = (layer.shadowOffset / 100) * fontSize;
               
               const sx = dist * Math.cos(angleRad);
@@ -825,12 +904,13 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
 
               const sAlpha = (layer.shadowOpacity ?? 1);
               ctx.shadowColor = hexToRgba(layer.shadowColor, sAlpha);
-              ctx.shadowBlur = (layer.shadowBlur / 100) * (fontSize * 2);
+              ctx.shadowBlur = (layer.shadowBlur / 100) * (fontSize * 2); // Blur relative to size
               ctx.shadowOffsetX = sx;
               ctx.shadowOffsetY = sy;
           }
 
-          // Draw the rasterized layer onto the main canvas
+          // Draw the baked layer. 
+          // Since shadow properties are set on 'ctx', the browser draws the shadow *behind* the image source.
           ctx.drawImage(scratch, 0, 0);
           
           ctx.restore();
@@ -964,6 +1044,41 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
   const rotStemHeight = 32 * invScale;
   const rotHandleOffset = -rotStemHeight; 
 
+  // Gizmo Configuration
+  let gizmoX = 0, gizmoY = 0, gizmoW = 0, gizmoH = 0, gizmoRot = 0;
+  
+  if (activeLayer && imgDims) {
+      if (activeLayer.isPathMoveMode && activeLayer.pathPoints.length > 0) {
+          // Path Gizmo Logic
+          const b = getPathBounds(activeLayer.pathPoints);
+          // Scale visual width to match screen pixels approx.
+          // Note: The Gizmo 'width/height' are in Intrinsic Pixels when mapped 1:1.
+          // However, the container is visual. We need to check if we use % or pixels.
+          // % is safer for positioning, but width/height in % is relative to image.
+          
+          gizmoX = (b.cx / imgDims.w) * 100;
+          gizmoY = (b.cy / imgDims.h) * 100;
+          
+          // Width in intrinsic pixels.
+          // Since the Gizmo is a child of the container which matches Aspect Ratio,
+          // If we use pixels, we might need to scale them if the container is shrunk?
+          // NO, we used `visualScale` in the Thought Process but let's check styles.
+          // The style block below sets `width` in pixels. 
+          // If the container is 500px but intrinsic is 2000px, 
+          // we need to scale down the width by (500/2000).
+          gizmoW = b.width * visualScale;
+          gizmoH = b.height * visualScale;
+          gizmoRot = 0; // Path AABB always 0
+      } else {
+          // Text Gizmo Logic
+          gizmoX = activeLayer.overlayPosition.x;
+          gizmoY = activeLayer.overlayPosition.y;
+          gizmoW = textBounds.width * visualScale;
+          gizmoH = textBounds.height * visualScale;
+          gizmoRot = activeLayer.rotation;
+      }
+  }
+
   return (
     <>
     <input 
@@ -1029,16 +1144,16 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                 </div>
             </div>
 
-            {/* GIZMO OVERLAY (Outside Clipped Area) - Only for Active Layer */}
-            {activeLayer && !activeLayer.isPathInputMode && activeLayer.pathPoints.length === 0 && imgDims && (
+            {/* GIZMO OVERLAY - Only for Active Layer (Text or Path Move) */}
+            {activeLayer && !activeLayer.isPathInputMode && (activeLayer.pathPoints.length === 0 || activeLayer.isPathMoveMode) && imgDims && (
                 <div
                     className="absolute pointer-events-none group z-50"
                     style={{
-                        left: `${activeLayer.overlayPosition.x}%`,
-                        top: `${activeLayer.overlayPosition.y}%`,
-                        width: textBounds.width,
-                        height: textBounds.height,
-                        transform: `translate(-50%, -50%) rotate(${activeLayer.rotation}deg) scale(${activeLayer.flipX ? -1 : 1}, ${activeLayer.flipY ? -1 : 1})`,
+                        left: `${gizmoX}%`,
+                        top: `${gizmoY}%`,
+                        width: gizmoW,
+                        height: gizmoH,
+                        transform: `translate(-50%, -50%) rotate(${gizmoRot}deg) scale(${activeLayer.flipX ? -1 : 1}, ${activeLayer.flipY ? -1 : 1})`,
                     }}
                 >
                     {/* The Bounding Box - Interactive Area */}

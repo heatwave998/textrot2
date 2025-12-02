@@ -35,13 +35,13 @@ interface ControlsProps {
 }
 
 const FONTS: FontFamily[] = [
-  'Abril Fatface', 'Alfa Slab One', 'Amatic SC', 'Anton', 'Bangers', 'Bebas Neue', 'Bodoni Moda', 'Cinzel',
-  'Cormorant Garamond', 'Crimson Text', 'DM Serif Display', 'Dancing Script', 'Eduardo Tunni', 'Fira Code',
-  'Gloria Hallelujah', 'Great Vibes', 'Inter', 'Italiana', 'Josefin Sans', 'Lato', 'League Gothic', 'Libre Baskerville',
-  'Lobster', 'Lora', 'Merriweather', 'Monoton', 'Montserrat', 'Noto Sans', 'Open Sans', 'Orbitron', 'Oswald',
-  'PT Sans', 'PT Serif', 'Pacifico', 'Permanent Marker', 'Playfair Display', 'Poppins', 'Raleway', 'Righteous',
-  'Roboto', 'Rubik Glitch', 'Shadows Into Light', 'Source Sans 3', 'Space Grotesque', 'Space Mono', 'Syne',
-  'Unbounded', 'VT323'
+  'Abril Fatface', 'Alfa Slab One', 'Amatic SC', 'Anton', 'Audiowide', 'Bangers', 'Bebas Neue', 'Bodoni Moda', 'Bungee Shade', 'Butcherman', 'Cinzel',
+  'Cormorant Garamond', 'Creepster', 'Crimson Text', 'DM Serif Display', 'Dancing Script', 'Eater', 'Eduardo Tunni', 'Fascinate Inline', 'Finger Paint', 'Fira Code',
+  'Frijole', 'Gloria Hallelujah', 'Great Vibes', 'Inter', 'Italiana', 'Josefin Sans', 'Lato', 'League Gothic', 'Libre Baskerville',
+  'Lobster', 'Lora', 'Megrim', 'Merriweather', 'Metal Mania', 'Michroma', 'Monoton', 'Montserrat', 'Nosifer', 'Noto Sans', 'Open Sans', 'Orbitron', 'Oswald',
+  'PT Sans', 'PT Serif', 'Pacifico', 'Permanent Marker', 'Piedra', 'Plaster', 'Playfair Display', 'Poiret One', 'Poppins', 'Press Start 2P', 'Quantico', 'Raleway', 'Righteous',
+  'Roboto', 'Rock Salt', 'Rubik Beastly', 'Rubik Glitch', 'Rye', 'Sancreek', 'Shadows Into Light', 'Shojumaru', 'Source Sans 3', 'Space Grotesque', 'Space Mono', 'Special Elite', 'Syne',
+  'Turret Road', 'Unbounded', 'UnifrakturMaguntia', 'VT323', 'Wallpoet', 'Zen Dots'
 ];
 
 const RATIOS: AspectRatio[] = ['1:1', '4:3', '3:2', '16:9'];
@@ -518,13 +518,24 @@ const Controls: React.FC<ControlsProps> = ({
                         disabled={activeLayer.isPathInputMode}
                         className={`flex-1 py-2 px-3 rounded-[3px] flex items-center justify-center gap-2 text-xs font-medium border transition-all ${activeLayer.isPathMoveMode ? 'bg-pink-500/10 text-pink-500 border-pink-500' : 'bg-neutral-950 text-neutral-400 border-neutral-800 hover:bg-neutral-900 disabled:opacity-50'}`}
                     >
-                        <Move size={14} /> Move Path
+                        <Move size={14} /> Modify Path
                     </button>
                 )}
 
                 {activeLayer.pathPoints.length > 0 && (
                      <button 
-                        onClick={() => updateLayer('pathPoints', [])}
+                        onClick={() => {
+                            if (!design.activeLayerId) return;
+                            setDesign(prev => ({
+                                ...prev,
+                                layers: prev.layers.map(l => l.id === prev.activeLayerId ? { 
+                                    ...l, 
+                                    pathPoints: [], 
+                                    isPathMoveMode: false,
+                                    isPathInputMode: false 
+                                } : l)
+                            }));
+                        }}
                         className="w-10 flex items-center justify-center rounded-[3px] bg-neutral-950 border border-neutral-800 text-neutral-400 hover:text-red-400 hover:border-red-400/50 transition-colors"
                      >
                          <Trash2 size={14} />
