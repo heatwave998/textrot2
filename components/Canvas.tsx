@@ -502,8 +502,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
 
 
   // --- Core Rendering Logic ---
-  // Renders the visual content of the layer (Text, Path, Effects) to the given context.
-  // This does NOT handle Shadow application; shadow is handled via composition in renderToContext.
   const renderLayerVisuals = (
       ctx: CanvasRenderingContext2D,
       layer: TextLayer,
@@ -965,15 +963,75 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
   }), [generateExport]);
 
   const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault(); e.stopPropagation(); setIsDraggingFile(true);
+    e.preventDefault(); 
+    e.stopPropagation(); 
+    setIsDraggingFile(true);
+    e.dataTransfer.dropEffect = 'copy';
   };
+  
   const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault(); e.stopPropagation(); setIsDraggingFile(false);
+    e.preventDefault(); 
+    e.stopPropagation(); 
+    setIsDraggingFile(false);
   };
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault(); e.stopPropagation(); setIsDraggingFile(false);
-    if (e.dataTransfer.files?.[0]?.type.startsWith('image/')) {
-        onImageUpload(e.dataTransfer.files[0]);
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault(); 
+    e.stopPropagation(); 
+    setIsDraggingFile(false);
+
+    // 1. Check for dropped files (Local File System)
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        const file = e.dataTransfer.files[0];
+        if (file.type.startsWith('image/')) {
+            onImageUpload(file);
+        }
+        return;
+    }
+
+    // 2. Check for dropped URLs (Web Images including .webp links)
+    const uri = e.dataTransfer.getData('text/uri-list');
+    const html = e.dataTransfer.getData('text/html');
+    let imageUrl = uri;
+
+    // Extract src from HTML img tag if direct URI is missing
+    if (!imageUrl && html) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const img = doc.querySelector('img');
+        if (img && img.src) {
+            imageUrl = img.src;
+        }
+    }
+
+    if (imageUrl) {
+        try {
+            const response = await fetch(imageUrl, { mode: 'cors' });
+            if (!response.ok) throw new Error(`Failed to fetch image: ${response.statusText}`);
+            
+            const blob = await response.blob();
+            if (blob.type.startsWith('image/')) {
+                // Infer filename from URL or default
+                let filename = 'dropped-image';
+                try {
+                    const urlPath = new URL(imageUrl).pathname;
+                    const name = urlPath.substring(urlPath.lastIndexOf('/') + 1);
+                    if (name) filename = name;
+                } catch (e) {
+                    // ignore URL parsing errors
+                }
+                
+                // Ensure extension matches blob type if possible, otherwise default
+                if (blob.type === 'image/webp' && !filename.endsWith('.webp')) filename += '.webp';
+                else if (blob.type === 'image/png' && !filename.endsWith('.png')) filename += '.png';
+                else if (blob.type === 'image/jpeg' && !filename.endsWith('.jpg')) filename += '.jpg';
+
+                const file = new File([blob], filename, { type: blob.type });
+                onImageUpload(file);
+            }
+        } catch (error) {
+            console.error("Error processing dropped image URL:", error);
+        }
     }
   };
 

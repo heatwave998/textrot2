@@ -107,7 +107,7 @@ const EffectsControls: React.FC<EffectsControlsProps> = ({ design, update, toggl
                 <div className="flex items-center justify-between mb-2">
                     <label className={`text-[10px] transition-all font-medium ${
                         activeLayer.isRainbowGlitch 
-                        ? 'bg-gradient-to-r from-red-500 via-yellow-500 to-blue-500 text-transparent bg-clip-text font-bold' 
+                        ? 'bg-gradient-to-r from-red-600 via-yellow-400 to-blue-700 text-transparent bg-clip-text font-bold' 
                         : 'text-neutral-500'
                     }`}>
                         Rainbow Mode
