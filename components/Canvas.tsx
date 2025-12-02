@@ -163,11 +163,12 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
 
   // Refs for drag calculations
   const dragStartRef = useRef({ x: 0, y: 0 }); // Screen coordinates
-  const initialLayerRef = useRef<TextLayer | null>(null); // Snapshot of layer at drag start
+  // Store a map of all selected layers' initial states when drag starts
+  const initialLayersRef = useRef<Map<string, TextLayer>>(new Map());
   const currentPathRef = useRef<Point[]>([]);
   
-  // Metrics for Gizmo
-  const [textBounds, setTextBounds] = useState({ width: 0, height: 0 });
+  // Metrics for Gizmos - Map of Layer ID to Bounds
+  const [textBounds, setTextBounds] = useState<Record<string, { width: number, height: number }>>({});
   // Visual Scale (Screen pixels per Intrinsic pixel)
   const [visualScale, setVisualScale] = useState(1);
 
@@ -179,9 +180,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
          // Create a ResizeObserver to update visual scale if container changes
          const observer = new ResizeObserver(() => {
               if (containerRef.current && imgDims.w > 0) {
-                 // The displayed width of the image element (approximate via container)
-                 // NOTE: Since img is max-w-full, we check the container or the img element if possible.
-                 // For now, container width is a good proxy in this layout.
                  setVisualScale(containerRef.current.offsetWidth / imgDims.w);
               }
          });
@@ -227,16 +225,22 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
     }
   }, [imageSrc]);
 
-  // Update Text Bounds when active layer changes
+  // Update Text Bounds for ALL selected layers when selection or content changes
   useEffect(() => {
-      if (textCanvasRef.current && imgDims && activeLayer) {
+      if (textCanvasRef.current && imgDims && design.selectedLayerIds.length > 0) {
           const ctx = textCanvasRef.current.getContext('2d');
           if (ctx) {
-              const metrics = measureTextLayout(ctx, activeLayer, imgDims.w);
-              setTextBounds(metrics);
+              const newBounds: Record<string, { width: number, height: number }> = {};
+              design.selectedLayerIds.forEach(id => {
+                  const layer = design.layers.find(l => l.id === id);
+                  if (layer) {
+                      newBounds[id] = measureTextLayout(ctx, layer, imgDims.w);
+                  }
+              });
+              setTextBounds(newBounds);
           }
       }
-  }, [activeLayer, imgDims]);
+  }, [design.layers, design.selectedLayerIds, imgDims]);
 
   // Handle mouse wheel zoom
   const handleWheel = (e: React.WheelEvent) => {
@@ -287,20 +291,26 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
       const coords = getIntrinsicCoordinates(e);
       if (!coords) return;
 
-      // 1. Gizmo Interactions (Stop Propagation to prevent Panning/Drawing)
+      // 1. Gizmo Interactions
       const target = e.target as HTMLElement;
-      // Use closest because the handle might have child elements (icons)
       const handleEl = target.closest('[data-handle]');
       const handleType = handleEl?.getAttribute('data-handle');
 
       if (handleType && activeLayer) {
           e.preventDefault();
           e.stopPropagation();
-          initialLayerRef.current = { ...activeLayer }; // Deep clone needed for pathPoints? Spread is shallow.
-          // For pathPoints, we need to clone the array
-          if (activeLayer.pathPoints) {
-              initialLayerRef.current.pathPoints = [...activeLayer.pathPoints];
-          }
+
+          // Snapshot ALL selected layers
+          const snapshotMap = new Map<string, TextLayer>();
+          design.layers.forEach(l => {
+              if (design.selectedLayerIds.includes(l.id)) {
+                  const cloned = { ...l };
+                  if (cloned.pathPoints) cloned.pathPoints = [...l.pathPoints];
+                  snapshotMap.set(l.id, cloned);
+              }
+          });
+          initialLayersRef.current = snapshotMap;
+          
           dragStartRef.current = { x: e.clientX, y: e.clientY };
 
           if (handleType === 'rotate') {
@@ -358,20 +368,25 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
       // --- GIZMO LOGIC ---
       if (['GIZMO_MOVE', 'GIZMO_SCALE', 'GIZMO_ROTATE'].includes(interactionMode)) {
           e.preventDefault();
-          if (!initialLayerRef.current || !activeLayer) return;
-
-          const startLayer = initialLayerRef.current;
           
-          // PATH MODE TRANSFORM
-          if (activeLayer.isPathMoveMode && startLayer.pathPoints.length > 0) {
-               const points = startLayer.pathPoints;
+          const primaryStartLayer = activeLayer ? initialLayersRef.current.get(activeLayer.id) : null;
+          if (!primaryStartLayer) return; // Should generally have a primary layer if gizmo is active
+
+          // Common Metric Vars
+          const rect = containerRef.current!.getBoundingClientRect();
+          const scaleFactor = imgDims.w / rect.width;
+
+          // PATH MODE TRANSFORM (Only supports single layer for now, usually)
+          if (activeLayer?.isPathMoveMode && primaryStartLayer.pathPoints.length > 0) {
+               // Path Transform Logic (Simplified for single active layer support primarily, 
+               // but could extend if multiple path layers selected)
+               // For safety, let's only do path transform if it's the active layer and single select?
+               // The controls logic forces single select for Path Tool, so this is safe.
+
+               const points = primaryStartLayer.pathPoints;
                const bounds = getPathBounds(points);
                const cx = bounds.cx;
                const cy = bounds.cy;
-
-               // Calculate delta in intrinsic pixels
-               const rect = containerRef.current!.getBoundingClientRect();
-               const scaleFactor = imgDims.w / rect.width;
                
                let newPoints = [...points];
 
@@ -380,16 +395,11 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                    const dyScreen = e.clientY - dragStartRef.current.y;
                    const dx = dxScreen * scaleFactor;
                    const dy = dyScreen * scaleFactor;
-
                    newPoints = points.map(p => ({ x: p.x + dx, y: p.y + dy }));
                } 
                else if (interactionMode === 'GIZMO_SCALE') {
-                   // Visual Center on screen
-                   // We need the screen coordinates of the center point (cx, cy)
-                   // cx is intrinsic.
                    const screenCx = rect.left + (cx / imgDims.w) * rect.width;
                    const screenCy = rect.top + (cy / imgDims.h) * rect.height;
-
                    const startDist = Math.hypot(dragStartRef.current.x - screenCx, dragStartRef.current.y - screenCy);
                    const currDist = Math.hypot(e.clientX - screenCx, e.clientY - screenCy);
                    const ratio = currDist / (startDist || 1);
@@ -402,16 +412,9 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                else if (interactionMode === 'GIZMO_ROTATE') {
                    const screenCx = rect.left + (cx / imgDims.w) * rect.width;
                    const screenCy = rect.top + (cy / imgDims.h) * rect.height;
-
                    const startAngle = Math.atan2(dragStartRef.current.y - screenCy, dragStartRef.current.x - screenCx);
                    const currAngle = Math.atan2(e.clientY - screenCy, e.clientX - screenCx);
-                   let deltaAngle = currAngle - startAngle;
-
-                   // Snap to 15 degrees if Shift
-                   if (e.shiftKey) {
-                       // Logic for snap is tricky with delta. 
-                       // Simplified: just use raw delta.
-                   }
+                   const deltaAngle = currAngle - startAngle;
 
                    const cos = Math.cos(deltaAngle);
                    const sin = Math.sin(deltaAngle);
@@ -421,20 +424,19 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                        y: cy + (p.x - cx) * sin + (p.y - cy) * cos
                    }));
                }
-
+               
                onPathDrawn(newPoints);
                return;
           }
 
-          // STANDARD TEXT TRANSFORM
+          // STANDARD TEXT TRANSFORM (Multi-Layer Support)
           const updatedLayers = design.layers.map(l => {
-              if (l.id !== activeLayer.id) return l;
+              if (!design.selectedLayerIds.includes(l.id)) return l;
+              
+              const startState = initialLayersRef.current.get(l.id);
+              if (!startState) return l;
 
               if (interactionMode === 'GIZMO_MOVE') {
-                   // Calculate delta in intrinsic pixels
-                   const rect = containerRef.current!.getBoundingClientRect();
-                   const scaleFactor = imgDims.w / rect.width;
-                   
                    const dxScreen = e.clientX - dragStartRef.current.x;
                    const dyScreen = e.clientY - dragStartRef.current.y;
                    
@@ -447,41 +449,49 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                    return {
                        ...l,
                        overlayPosition: {
-                           x: Math.max(0, Math.min(100, startLayer.overlayPosition.x + dxPercent)),
-                           y: Math.max(0, Math.min(100, startLayer.overlayPosition.y + dyPercent))
+                           x: Math.max(0, Math.min(100, startState.overlayPosition.x + dxPercent)),
+                           y: Math.max(0, Math.min(100, startState.overlayPosition.y + dyPercent))
                        }
                    };
               }
 
               if (interactionMode === 'GIZMO_SCALE') {
-                   const rect = containerRef.current!.getBoundingClientRect();
-                   const cx = rect.left + (startLayer.overlayPosition.x / 100) * rect.width;
-                   const cy = rect.top + (startLayer.overlayPosition.y / 100) * rect.height;
+                   // Scale is based on the Active Layer's center/handles
+                   // All selected layers scale relative to their OWN size by the SAME ratio
+                   // This preserves relative proportions.
+                   const primaryCx = rect.left + (primaryStartLayer.overlayPosition.x / 100) * rect.width;
+                   const primaryCy = rect.top + (primaryStartLayer.overlayPosition.y / 100) * rect.height;
                    
-                   const startDist = Math.hypot(dragStartRef.current.x - cx, dragStartRef.current.y - cy);
-                   const currDist = Math.hypot(e.clientX - cx, e.clientY - cy);
+                   const startDist = Math.hypot(dragStartRef.current.x - primaryCx, dragStartRef.current.y - primaryCy);
+                   const currDist = Math.hypot(e.clientX - primaryCx, e.clientY - primaryCy);
                    
                    const ratio = currDist / (startDist || 1);
-                   const newSize = Math.min(50, Math.max(0.1, startLayer.textSize * ratio));
+                   const newSize = Math.min(50, Math.max(0.1, startState.textSize * ratio));
                    
                    return { ...l, textSize: newSize };
               }
 
               if (interactionMode === 'GIZMO_ROTATE') {
-                   const rect = containerRef.current!.getBoundingClientRect();
-                   const cx = rect.left + (startLayer.overlayPosition.x / 100) * rect.width;
-                   const cy = rect.top + (startLayer.overlayPosition.y / 100) * rect.height;
+                   const primaryCx = rect.left + (primaryStartLayer.overlayPosition.x / 100) * rect.width;
+                   const primaryCy = rect.top + (primaryStartLayer.overlayPosition.y / 100) * rect.height;
                    
-                   const angleRad = Math.atan2(e.clientY - cy, e.clientX - cx);
-                   let angleDeg = angleRad * (180 / Math.PI) + 90; 
+                   const angleRad = Math.atan2(e.clientY - primaryCy, e.clientX - primaryCx);
+                   // We need Delta from drag start to apply to all layers
+                   const startAngleRad = Math.atan2(dragStartRef.current.y - primaryCy, dragStartRef.current.x - primaryCx);
+                   let deltaDeg = (angleRad - startAngleRad) * (180 / Math.PI);
                    
-                   if (angleDeg < 0) angleDeg += 360;
+                   let newAngle = startState.rotation + deltaDeg;
                    
+                   // Snapping logic applies to the delta usually, or the final angle?
+                   // If shift is held, snap to 15 deg increments.
                    if (e.shiftKey) {
-                       angleDeg = Math.round(angleDeg / 15) * 15;
+                       newAngle = Math.round(newAngle / 15) * 15;
                    }
+                   
+                   // Normalize
+                   newAngle = ((newAngle % 360) + 360) % 360;
 
-                   return { ...l, rotation: Math.round(angleDeg) };
+                   return { ...l, rotation: newAngle };
               }
               return l;
           });
@@ -497,7 +507,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
       }
       setInteractionMode('NONE');
       setActiveGizmoHandle(null);
-      initialLayerRef.current = null;
+      initialLayersRef.current.clear();
   };
 
 
@@ -522,33 +532,9 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
     const activePointsRaw = (interactionMode === 'DRAW_PATH' && isActive) ? currentPathRef.current : layer.pathPoints;
     const activePoints = (interactionMode === 'DRAW_PATH' && isActive) ? activePointsRaw : getSmoothedPoints(activePointsRaw, layer.pathSmoothing);
 
-    const showPathLine = isPreview && isActive && (
-        (interactionMode === 'DRAW_PATH' && activePoints.length > 1) ||
-        (layer.isPathMoveMode && activePoints.length > 1)
-    );
-
-    if (showPathLine) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.strokeStyle = '#ec4899'; 
-        ctx.lineWidth = Math.max(2, width * 0.003); 
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-
-        if (layer.isPathMoveMode && interactionMode !== 'DRAW_PATH') {
-             ctx.setLineDash([15, 15]); 
-             ctx.globalAlpha = 0.6;
-        }
-        
-        ctx.moveTo(activePoints[0].x, activePoints[0].y);
-        for(const p of activePoints) {
-            ctx.lineTo(p.x, p.y);
-        }
-        ctx.stroke();
-        ctx.restore();
-        
-        if (interactionMode === 'DRAW_PATH') return; 
-    }
+    // If we are DRAWING the path, we don't render the text at all, just return.
+    // The path line is now rendered in renderToContext to avoid shadows.
+    if (interactionMode === 'DRAW_PATH' && isActive) return; 
 
     const fontSize = (layer.textSize / 100) * width;
     const fontWeight = layer.isBold ? 'bold' : 'normal';
@@ -916,6 +902,39 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
           ctx.drawImage(scratch, 0, 0);
           
           ctx.restore();
+
+          // 4. Draw Path Line (Directly on Main CTX, NO Shadow)
+          const isActive = layer.id === design.activeLayerId;
+          const isDrawing = interactionMode === 'DRAW_PATH' && isActive;
+          
+          const activePointsRaw = isDrawing ? currentPathRef.current : layer.pathPoints;
+          const activePoints = isDrawing ? activePointsRaw : getSmoothedPoints(activePointsRaw, layer.pathSmoothing);
+
+          const showPathLine = isPreview && isActive && (
+              (isDrawing && activePoints.length > 1) ||
+              (layer.isPathMoveMode && activePoints.length > 1)
+          );
+
+          if (showPathLine) {
+              ctx.save();
+              ctx.beginPath();
+              ctx.strokeStyle = '#ec4899'; 
+              ctx.lineWidth = Math.max(2, width * 0.003); 
+              ctx.lineCap = 'round';
+              ctx.lineJoin = 'round';
+
+              if (layer.isPathMoveMode && !isDrawing) {
+                  ctx.setLineDash([15, 15]); 
+                  ctx.globalAlpha = 0.6;
+              }
+              
+              ctx.moveTo(activePoints[0].x, activePoints[0].y);
+              for(const p of activePoints) {
+                  ctx.lineTo(p.x, p.y);
+              }
+              ctx.stroke();
+              ctx.restore();
+          }
       });
 
   }, [design.layers, interactionMode, design.activeLayerId]);
@@ -1106,40 +1125,114 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
   const rotStemHeight = 32 * invScale;
   const rotHandleOffset = -rotStemHeight; 
 
-  // Gizmo Configuration
-  let gizmoX = 0, gizmoY = 0, gizmoW = 0, gizmoH = 0, gizmoRot = 0;
-  
-  if (activeLayer && imgDims) {
-      if (activeLayer.isPathMoveMode && activeLayer.pathPoints.length > 0) {
-          // Path Gizmo Logic
-          const b = getPathBounds(activeLayer.pathPoints);
-          // Scale visual width to match screen pixels approx.
-          // Note: The Gizmo 'width/height' are in Intrinsic Pixels when mapped 1:1.
-          // However, the container is visual. We need to check if we use % or pixels.
-          // % is safer for positioning, but width/height in % is relative to image.
-          
-          gizmoX = (b.cx / imgDims.w) * 100;
-          gizmoY = (b.cy / imgDims.h) * 100;
-          
-          // Width in intrinsic pixels.
-          // Since the Gizmo is a child of the container which matches Aspect Ratio,
-          // If we use pixels, we might need to scale them if the container is shrunk?
-          // NO, we used `visualScale` in the Thought Process but let's check styles.
-          // The style block below sets `width` in pixels. 
-          // If the container is 500px but intrinsic is 2000px, 
-          // we need to scale down the width by (500/2000).
-          gizmoW = b.width * visualScale;
-          gizmoH = b.height * visualScale;
-          gizmoRot = 0; // Path AABB always 0
+  // Gizmo Rendering Logic
+  const renderGizmo = (layerId: string, isPrimary: boolean) => {
+      const layer = design.layers.find(l => l.id === layerId);
+      if (!layer || !imgDims) return null;
+
+      let gx = 0, gy = 0, gw = 0, gh = 0, gr = 0;
+      
+      if (layer.isPathMoveMode && layer.pathPoints.length > 0) {
+          const b = getPathBounds(layer.pathPoints);
+          gx = (b.cx / imgDims.w) * 100;
+          gy = (b.cy / imgDims.h) * 100;
+          gw = b.width * visualScale;
+          gh = b.height * visualScale;
+          gr = 0; 
       } else {
-          // Text Gizmo Logic
-          gizmoX = activeLayer.overlayPosition.x;
-          gizmoY = activeLayer.overlayPosition.y;
-          gizmoW = textBounds.width * visualScale;
-          gizmoH = textBounds.height * visualScale;
-          gizmoRot = activeLayer.rotation;
+          const bounds = textBounds[layerId];
+          if (!bounds) return null; // Not measured yet
+          gx = layer.overlayPosition.x;
+          gy = layer.overlayPosition.y;
+          gw = bounds.width * visualScale;
+          gh = bounds.height * visualScale;
+          gr = layer.rotation;
       }
-  }
+
+      return (
+        <div
+            key={layerId}
+            className={`absolute pointer-events-none group z-50 ${isPrimary ? 'z-[60]' : 'z-[50]'}`}
+            style={{
+                left: `${gx}%`,
+                top: `${gy}%`,
+                width: gw,
+                height: gh,
+                transform: `translate(-50%, -50%) rotate(${gr}deg) scale(${layer.flipX ? -1 : 1}, ${layer.flipY ? -1 : 1})`,
+            }}
+        >
+            {/* The Bounding Box */}
+            <div 
+                data-handle={isPrimary ? "box" : undefined}
+                className={`absolute inset-0 border-dashed ${isPrimary ? 'border-white/60 hover:border-pink-500/80 cursor-move pointer-events-auto' : 'border-white/30'}`}
+                style={{ borderWidth: `${boxBorderWidth}px` }}
+            ></div>
+
+            {/* Handles - Only for Primary */}
+            {isPrimary && (
+                <>
+                    {/* Scale Handles (Corners) */}
+                    {[
+                        { id: 'tl', style: { top: `${cornerOffset}px`, left: `${cornerOffset}px` } },
+                        { id: 'tr', style: { top: `${cornerOffset}px`, right: `${cornerOffset}px` } },
+                        { id: 'bl', style: { bottom: `${cornerOffset}px`, left: `${cornerOffset}px` } },
+                        { id: 'br', style: { bottom: `${cornerOffset}px`, right: `${cornerOffset}px` } }
+                    ].map((h, i) => (
+                        <div 
+                            key={h.id}
+                            data-handle={h.id}
+                            style={{ 
+                                ...h.style,
+                                width: `${cornerSize}px`,
+                                height: `${cornerSize}px`
+                            }}
+                            className={`absolute bg-white border border-pink-500 hover:bg-pink-500 pointer-events-auto ${
+                                (i === 1 || i === 2) ? 'cursor-nesw-resize' : 'cursor-nwse-resize'
+                            }`}
+                        />
+                    ))}
+
+                    {/* Rotation Stem */}
+                    <div 
+                        className="absolute left-1/2 -translate-x-1/2 bg-pink-500/50" 
+                        style={{
+                            top: 0,
+                            width: `${1 * invScale}px`,
+                            height: `${rotStemHeight}px`,
+                            transform: `translateY(-100%)`
+                        }}
+                    />
+
+                    {/* Rotation Handle (Lollipop) */}
+                    <div 
+                        data-handle="rotate"
+                        className="absolute left-1/2 bg-white/10 hover:bg-pink-500/20 border-white/50 backdrop-blur-sm flex items-center justify-center pointer-events-auto cursor-grab shadow-lg transition-colors rounded-full"
+                        style={{
+                            width: `${rotHandleSize}px`,
+                            height: `${rotHandleSize}px`,
+                            top: `${rotHandleOffset}px`,
+                            transform: `translate(-50%, -50%)`, // Center on top of stem
+                            borderWidth: `${1 * invScale}px`
+                        }}
+                        title="Drag to Rotate"
+                    >
+                        <div 
+                            className="bg-white rounded-full pointer-events-none" 
+                            style={{ width: `${6 * invScale}px`, height: `${6 * invScale}px` }}
+                        />
+                        <RotateCw size={20 * invScale} className="text-white absolute opacity-0 hover:opacity-100 pointer-events-none transition-opacity" />
+                    </div>
+
+                    {/* Visual Anchor for Position */}
+                    <div 
+                        className="absolute top-1/2 left-1/2 bg-pink-500 rounded-full -translate-x-1/2 -translate-y-1/2 pointer-events-none opacity-50"
+                        style={{ width: `${4 * invScale}px`, height: `${4 * invScale}px` }}
+                    ></div>
+                </>
+            )}
+        </div>
+      );
+  };
 
   return (
     <>
@@ -1206,84 +1299,18 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                 </div>
             </div>
 
-            {/* GIZMO OVERLAY - Only for Active Layer (Text or Path Move) */}
-            {activeLayer && !activeLayer.isPathInputMode && (activeLayer.pathPoints.length === 0 || activeLayer.isPathMoveMode) && imgDims && (
-                <div
-                    className="absolute pointer-events-none group z-50"
-                    style={{
-                        left: `${gizmoX}%`,
-                        top: `${gizmoY}%`,
-                        width: gizmoW,
-                        height: gizmoH,
-                        transform: `translate(-50%, -50%) rotate(${gizmoRot}deg) scale(${activeLayer.flipX ? -1 : 1}, ${activeLayer.flipY ? -1 : 1})`,
-                    }}
-                >
-                    {/* The Bounding Box - Interactive Area */}
-                    <div 
-                        data-handle="box"
-                        className="absolute inset-0 border-white/60 border-dashed hover:border-pink-500/80 pointer-events-auto cursor-move"
-                        style={{ borderWidth: `${boxBorderWidth}px` }}
-                    ></div>
+            {/* GIZMO OVERLAYS */}
+            {imgDims && design.selectedLayerIds.map(layerId => {
+                const layer = design.layers.find(l => l.id === layerId);
+                // Don't show gizmo if Path Drawing mode is active on ANY layer (cleans up view)
+                if (!layer || layer.isPathInputMode) return null;
+                // Only show path gizmo if Move Mode is active
+                if (layer.pathPoints.length > 0 && !layer.isPathMoveMode) return null;
 
-                    {/* Scale Handles (Corners) */}
-                    {[
-                        { id: 'tl', style: { top: `${cornerOffset}px`, left: `${cornerOffset}px` } },
-                        { id: 'tr', style: { top: `${cornerOffset}px`, right: `${cornerOffset}px` } },
-                        { id: 'bl', style: { bottom: `${cornerOffset}px`, left: `${cornerOffset}px` } },
-                        { id: 'br', style: { bottom: `${cornerOffset}px`, right: `${cornerOffset}px` } }
-                    ].map((h, i) => (
-                        <div 
-                            key={h.id}
-                            data-handle={h.id}
-                            style={{ 
-                                ...h.style,
-                                width: `${cornerSize}px`,
-                                height: `${cornerSize}px`
-                            }}
-                            className={`absolute bg-white border border-pink-500 hover:bg-pink-500 pointer-events-auto ${
-                                (i === 1 || i === 2) ? 'cursor-nesw-resize' : 'cursor-nwse-resize'
-                            }`}
-                        />
-                    ))}
+                const isPrimary = layerId === design.activeLayerId;
+                return renderGizmo(layerId, isPrimary);
+            })}
 
-                    {/* Rotation Stem */}
-                    <div 
-                        className="absolute left-1/2 -translate-x-1/2 bg-pink-500/50" 
-                        style={{
-                            top: 0,
-                            width: `${1 * invScale}px`,
-                            height: `${rotStemHeight}px`,
-                            transform: `translateY(-100%)`
-                        }}
-                    />
-
-                    {/* Rotation Handle (Lollipop) */}
-                    <div 
-                        data-handle="rotate"
-                        className="absolute left-1/2 bg-white/10 hover:bg-pink-500/20 border-white/50 backdrop-blur-sm flex items-center justify-center pointer-events-auto cursor-grab shadow-lg transition-colors rounded-full"
-                        style={{
-                            width: `${rotHandleSize}px`,
-                            height: `${rotHandleSize}px`,
-                            top: `${rotHandleOffset}px`,
-                            transform: `translate(-50%, -50%)`, // Center on top of stem
-                            borderWidth: `${1 * invScale}px`
-                        }}
-                        title="Drag to Rotate"
-                    >
-                        <div 
-                            className="bg-white rounded-full pointer-events-none" 
-                            style={{ width: `${6 * invScale}px`, height: `${6 * invScale}px` }}
-                        />
-                        <RotateCw size={20 * invScale} className="text-white absolute opacity-0 hover:opacity-100 pointer-events-none transition-opacity" />
-                    </div>
-
-                    {/* Visual Anchor for Position */}
-                    <div 
-                        className="absolute top-1/2 left-1/2 bg-pink-500 rounded-full -translate-x-1/2 -translate-y-1/2 pointer-events-none opacity-50"
-                        style={{ width: `${4 * invScale}px`, height: `${4 * invScale}px` }}
-                    ></div>
-                </div>
-            )}
           </>
         ) : (
           <div 

@@ -1,4 +1,5 @@
 
+
 import { FontFamily } from './types';
 
 export const FONT_CATEGORIES = {
@@ -12,12 +13,12 @@ export const FONT_CATEGORIES = {
 
 export const FONTS: FontFamily[] = [
   'Abril Fatface', 'Alfa Slab One', 'Amatic SC', 'Anton', 'Audiowide', 'Bangers', 'Bebas Neue', 'Bodoni Moda', 'Bungee Shade', 'Butcherman', 'Cinzel',
-  'Cormorant Garamond', 'Creepster', 'Crimson Text', 'DM Serif Display', 'Dancing Script', 'Eater', 'Eduardo Tunni', 'Fascinate Inline', 'Finger Paint', 'Fira Code',
-  'Frijole', 'Gloria Hallelujah', 'Great Vibes', 'Inter', 'Italiana', 'Josefin Sans', 'Lato', 'League Gothic', 'Libre Baskerville',
-  'Lobster', 'Lora', 'Megrim', 'Merriweather', 'Metal Mania', 'Michroma', 'Monoton', 'Montserrat', 'Nosifer', 'Noto Sans', 'Open Sans', 'Orbitron', 'Oswald',
-  'PT Sans', 'PT Serif', 'Pacifico', 'Permanent Marker', 'Piedra', 'Plaster', 'Playfair Display', 'Poiret One', 'Poppins', 'Press Start 2P', 'Quantico', 'Raleway', 'Righteous',
-  'Roboto', 'Rock Salt', 'Rubik Beastly', 'Rubik Glitch', 'Rye', 'Sancreek', 'Shadows Into Light', 'Shojumaru', 'Source Sans 3', 'Space Grotesque', 'Space Mono', 'Special Elite', 'Syne',
-  'Turret Road', 'Unbounded', 'UnifrakturMaguntia', 'VT323', 'Wallpoet', 'Zen Dots'
+  'Cormorant Garamond', 'Creepster', 'Crimson Text', 'Diplomata', 'DM Serif Display', 'Dancing Script', 'DotGothic16', 'Eater', 'Eduardo Tunni', 'Ewert', 'Fascinate Inline', 'Finger Paint', 'Fira Code',
+  'Foldit', 'Frijole', 'Geostar', 'Gloria Hallelujah', 'Great Vibes', 'Grenze Gotisch', 'Inter', 'Italiana', 'Jacquard 12', 'Jersey 10', 'Josefin Sans', 'Kablammo', 'Krona One', 'Lato', 'League Gothic', 'Libre Baskerville',
+  'Lobster', 'Lora', 'Major Mono Display', 'Megrim', 'Merriweather', 'Metal Mania', 'Michroma', 'Micro 5', 'Monoton', 'Montserrat', 'Nosifer', 'Noto Sans', 'Oi', 'Open Sans', 'Orbitron', 'Oswald', 'Oxanium',
+  'PT Sans', 'PT Serif', 'Pacifico', 'Permanent Marker', 'Piedra', 'Pixelify Sans', 'Plaster', 'Playfair Display', 'Poiret One', 'Poppins', 'Press Start 2P', 'Quantico', 'Raleway', 'Righteous',
+  'Roboto', 'Rock Salt', 'Rubik 80s Fade', 'Rubik Beastly', 'Rubik Burned', 'Rubik Glitch', 'Rubik Iso', 'Rubik Marker Hatch', 'Rubik Microbe', 'Rubik Puddles', 'Rubik Wet Paint', 'Rye', 'Sancreek', 'Shadows Into Light', 'Share Tech Mono', 'Shojumaru', 'Silkscreen', 'Sixtyfour', 'Slackey', 'Smokum', 'Source Sans 3', 'Space Grotesque', 'Space Mono', 'Special Elite', 'Syne',
+  'Turret Road', 'Unbounded', 'UnifrakturMaguntia', 'VT323', 'Vast Shadow', 'Wallpoet', 'Workbench', 'Zen Dots'
 ];
 
 // Helper to map fonts to categories
@@ -43,13 +44,17 @@ export const getFontCategory = (font: FontFamily): string => {
     ],
     [FONT_CATEGORIES.ALIEN]: [
         'Audiowide', 'Orbitron', 'Michroma', 'Turret Road', 'Zen Dots', 'Megrim', 
-        'Press Start 2P', 'Wallpoet', 'Rubik Glitch', 'Rubik Beastly', 'Frijole', 
-        'Butcherman', 'Creepster', 'Eater', 'Metal Mania', 'Nosifer', 'Piedra', 'Sancreek'
+        'Press Start 2P', 'Wallpoet', 'Rubik Glitch', 'Rubik Beastly', 'Rubik Microbe', 'Rubik Wet Paint',
+        'Frijole', 'Butcherman', 'Creepster', 'Eater', 'Metal Mania', 'Nosifer', 'Piedra', 'Sancreek',
+        'Sixtyfour', 'Silkscreen', 'DotGothic16', 'Major Mono Display', 'Share Tech Mono', 'Oxanium', 
+        'Krona One', 'Jacquard 12', 'Jersey 10', 'Pixelify Sans', 'Micro 5'
     ],
     [FONT_CATEGORIES.DISPLAY]: [
         'Alfa Slab One', 'Bangers', 'Bungee Shade', 'Fascinate Inline', 'Monoton', 
         'Plaster', 'Poiret One', 'Righteous', 'Shojumaru', 'Special Elite', 
-        'UnifrakturMaguntia', 'Rye'
+        'UnifrakturMaguntia', 'Rye', 'Foldit', 'Kablammo', 'Rubik Iso', 'Rubik 80s Fade',
+        'Rubik Burned', 'Rubik Marker Hatch', 'Rubik Puddles', 'Diplomata', 'Geostar', 
+        'Ewert', 'Grenze Gotisch', 'Vast Shadow', 'Workbench', 'Slackey', 'Smokum', 'Oi'
     ]
   };
 

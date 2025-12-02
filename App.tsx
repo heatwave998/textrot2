@@ -68,7 +68,8 @@ const DEFAULT_DESIGN: DesignState = {
   aspectRatio: '1:1',
   orientation: 'landscape',
   layers: [createLayer(INITIAL_LAYER_ID)],
-  activeLayerId: INITIAL_LAYER_ID
+  activeLayerId: INITIAL_LAYER_ID,
+  selectedLayerIds: [INITIAL_LAYER_ID]
 };
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -249,7 +250,8 @@ export default function App() {
     setDesign(prev => ({
         ...prev,
         layers: [createLayer(newId, 'BLANK CANVAS')],
-        activeLayerId: newId
+        activeLayerId: newId,
+        selectedLayerIds: [newId]
     }));
     setIsBlankConfirmOpen(false);
   };

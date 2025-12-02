@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { DesignState, FontFamily, AspectRatio, TextLayer } from '../types';
 import { 
   Type, Palette, Layers, Download, Sparkles, 
@@ -15,6 +15,7 @@ import EffectsControls from './EffectsControls';
 import ConfirmationModal from './ConfirmationModal';
 import FontBookModal from './FontBookModal';
 import CollapsibleSection from './CollapsibleSection';
+import Tooltip from './Tooltip';
 import { useIsKeyPressed, useKeyboard } from '../hooks/useKeyboard';
 import { FONTS } from '../constants';
 
@@ -37,6 +38,11 @@ interface ControlsProps {
 }
 
 const RATIOS: AspectRatio[] = ['1:1', '4:3', '3:2', '16:9'];
+
+// Nudge Amounts in Percentages
+const NUDGE_SMALL = 0.1;
+const NUDGE_MEDIUM = 0.5;
+const NUDGE_LARGE = 5.0;
 
 const Controls: React.FC<ControlsProps> = ({ 
   design, 
@@ -75,9 +81,30 @@ const Controls: React.FC<ControlsProps> = ({
     setPanelState(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const toggleAllPanels = useCallback(() => {
+    setPanelState(prev => {
+        // If all are currently open, collapse all. Otherwise, expand all.
+        const allOpen = Object.values(prev).every(v => v === true);
+        const newState = !allOpen;
+        
+        return {
+            gen: newState,
+            layers: newState,
+            content: newState,
+            typography: newState,
+            appearance: newState,
+            transform: newState,
+            path: newState,
+            effects: newState,
+            blending: newState
+        };
+    });
+  }, []);
+
   // Keyboard Shortcuts for Panel Toggles
   // Mapped as requested: Shift+1 for Layers through Shift+8 for Blending
-  useKeyboard([
+  const panelShortcuts = useMemo(() => [
+    { id: 'toggle-all', combo: { code: 'Backquote', shift: true }, action: toggleAllPanels },
     { id: 'toggle-layers', combo: { code: 'Digit1', shift: true }, action: () => togglePanel('layers') },
     { id: 'toggle-content', combo: { code: 'Digit2', shift: true }, action: () => togglePanel('content') },
     { id: 'toggle-typography', combo: { code: 'Digit3', shift: true }, action: () => togglePanel('typography') },
@@ -86,7 +113,51 @@ const Controls: React.FC<ControlsProps> = ({
     { id: 'toggle-path', combo: { code: 'Digit6', shift: true }, action: () => togglePanel('path') },
     { id: 'toggle-effects', combo: { code: 'Digit7', shift: true }, action: () => togglePanel('effects') },
     { id: 'toggle-blending', combo: { code: 'Digit8', shift: true }, action: () => togglePanel('blending') },
-  ]);
+  ], [toggleAllPanels]);
+  
+  useKeyboard(panelShortcuts);
+
+  // --- Layer Nudging Logic ---
+  const nudgeLayer = useCallback((axis: 'x' | 'y', delta: number) => {
+      setDesign(prev => {
+          if (prev.selectedLayerIds.length === 0) return prev;
+          return {
+              ...prev,
+              layers: prev.layers.map(l => {
+                  if (!prev.selectedLayerIds.includes(l.id)) return l;
+                  return {
+                      ...l,
+                      overlayPosition: {
+                          ...l.overlayPosition,
+                          [axis]: l.overlayPosition[axis] + delta
+                      }
+                  };
+              })
+          };
+      });
+  }, [setDesign]);
+
+  const nudgeShortcuts = useMemo(() => [
+      // Base (Medium Nudge) - No modifiers
+      { id: 'nudge-up', combo: { code: 'ArrowUp' }, action: () => nudgeLayer('y', -NUDGE_MEDIUM) },
+      { id: 'nudge-down', combo: { code: 'ArrowDown' }, action: () => nudgeLayer('y', NUDGE_MEDIUM) },
+      { id: 'nudge-left', combo: { code: 'ArrowLeft' }, action: () => nudgeLayer('x', -NUDGE_MEDIUM) },
+      { id: 'nudge-right', combo: { code: 'ArrowRight' }, action: () => nudgeLayer('x', NUDGE_MEDIUM) },
+
+      // Shift (Large Nudge)
+      { id: 'nudge-up-lg', combo: { code: 'ArrowUp', shift: true }, action: () => nudgeLayer('y', -NUDGE_LARGE) },
+      { id: 'nudge-down-lg', combo: { code: 'ArrowDown', shift: true }, action: () => nudgeLayer('y', NUDGE_LARGE) },
+      { id: 'nudge-left-lg', combo: { code: 'ArrowLeft', shift: true }, action: () => nudgeLayer('x', -NUDGE_LARGE) },
+      { id: 'nudge-right-lg', combo: { code: 'ArrowRight', shift: true }, action: () => nudgeLayer('x', NUDGE_LARGE) },
+
+      // Alt (Micro Nudge)
+      { id: 'nudge-up-sm', combo: { code: 'ArrowUp', alt: true }, action: () => nudgeLayer('y', -NUDGE_SMALL) },
+      { id: 'nudge-down-sm', combo: { code: 'ArrowDown', alt: true }, action: () => nudgeLayer('y', NUDGE_SMALL) },
+      { id: 'nudge-left-sm', combo: { code: 'ArrowLeft', alt: true }, action: () => nudgeLayer('x', -NUDGE_SMALL) },
+      { id: 'nudge-right-sm', combo: { code: 'ArrowRight', alt: true }, action: () => nudgeLayer('x', NUDGE_SMALL) },
+  ], [nudgeLayer]);
+
+  useKeyboard(nudgeShortcuts);
 
   // Keyboard States
   const isShiftPressed = useIsKeyPressed('Shift');
@@ -105,18 +176,75 @@ const Controls: React.FC<ControlsProps> = ({
     if (!design.activeLayerId) return;
     setDesign(prev => ({
         ...prev,
-        layers: prev.layers.map(l => l.id === prev.activeLayerId ? { ...l, [key]: value } : l)
+        layers: prev.layers.map(l => prev.selectedLayerIds.includes(l.id) ? { ...l, [key]: value } : l)
     }));
   };
 
   const toggleLayer = (key: keyof TextLayer) => {
     if (!activeLayer) return;
-    updateLayer(key, !activeLayer[key]);
+    // We toggle based on the active layer's state, enforcing consistency across selection
+    const newValue = !activeLayer[key];
+    updateLayer(key, newValue);
   };
 
   const updatePosition = (axis: 'x' | 'y', value: number) => {
       if (!activeLayer) return;
+      // When dragging sliders, we set the absolute value for the active layer
+      // For other selected layers, we could apply a delta, but for property sliders, 
+      // strict equality (snapping them together) is often preferred or we need complex delta logic.
+      // Simplest UX for a "Position Slider" in multi-select is usually "Align all to this value" or disable it.
+      // Let's go with "Align all to this value" for now as it's consistent with color/font picking.
       updateLayer('overlayPosition', { ...activeLayer.overlayPosition, [axis]: value });
+  };
+
+  // Selection Logic
+  const handleLayerClick = (id: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+      const { ctrlKey, metaKey, shiftKey } = e;
+      const isMultiSelect = ctrlKey || metaKey;
+      
+      setDesign(prev => {
+          let newSelected = [...prev.selectedLayerIds];
+          let newActive = prev.activeLayerId;
+
+          if (isMultiSelect) {
+              if (newSelected.includes(id)) {
+                  newSelected = newSelected.filter(sid => sid !== id);
+                  // If we deselected the active layer, pick the last one remaining, or null
+                  if (newActive === id) {
+                      newActive = newSelected.length > 0 ? newSelected[newSelected.length - 1] : null;
+                  }
+              } else {
+                  newSelected.push(id);
+                  newActive = id; // Make newly selected active
+              }
+          } else if (shiftKey && prev.activeLayerId) {
+               // Range select
+               const allIds = prev.layers.slice().reverse().map(l => l.id); // Visual order (Top to Bottom)
+               const startIdx = allIds.indexOf(prev.activeLayerId);
+               const endIdx = allIds.indexOf(id);
+               
+               if (startIdx !== -1 && endIdx !== -1) {
+                   const min = Math.min(startIdx, endIdx);
+                   const max = Math.max(startIdx, endIdx);
+                   const range = allIds.slice(min, max + 1);
+                   // Union with existing selection or replace? Standard is replace usually, but let's just ensure range is selected.
+                   const set = new Set([...newSelected, ...range]);
+                   newSelected = Array.from(set);
+                   newActive = id;
+               }
+          } else {
+              // Single select
+              newSelected = [id];
+              newActive = id;
+          }
+
+          return {
+              ...prev,
+              selectedLayerIds: newSelected,
+              activeLayerId: newActive
+          };
+      });
   };
 
   // Layer Management
@@ -170,7 +298,8 @@ const Controls: React.FC<ControlsProps> = ({
       setDesign(prev => ({
           ...prev,
           layers: [...prev.layers, newLayer],
-          activeLayerId: newId
+          activeLayerId: newId,
+          selectedLayerIds: [newId]
       }));
   };
 
@@ -183,11 +312,31 @@ const Controls: React.FC<ControlsProps> = ({
       if (!layerToDelete) return;
 
       setDesign(prev => {
-          const newLayers = prev.layers.filter(l => l.id !== layerToDelete);
+          // If deleting part of selection, remove all selected? Or just the target?
+          // If clicked trash on a layer that is part of selection, delete all selected?
+          // Simplest: Delete just the target, but remove from selection lists.
+          const isSelected = prev.selectedLayerIds.includes(layerToDelete);
+          
+          let idsToDelete = [layerToDelete];
+          if (isSelected && prev.selectedLayerIds.length > 1) {
+              // If we delete one item of a multi-selection, often user expects that item gone.
+              // If we wanted to delete ALL selected, we'd need a bulk delete action.
+              // We'll stick to single delete for the button click.
+          }
+
+          const newLayers = prev.layers.filter(l => !idsToDelete.includes(l.id));
+          const newSelected = prev.selectedLayerIds.filter(id => !idsToDelete.includes(id));
+          
+          let newActive = prev.activeLayerId;
+          if (idsToDelete.includes(newActive || '')) {
+              newActive = newSelected.length > 0 ? newSelected[newSelected.length - 1] : (newLayers.length > 0 ? newLayers[newLayers.length - 1].id : null);
+          }
+
           return {
               ...prev,
               layers: newLayers,
-              activeLayerId: newLayers.length > 0 ? newLayers[newLayers.length - 1].id : null
+              activeLayerId: newActive,
+              selectedLayerIds: newSelected.length === 0 && newActive ? [newActive] : newSelected
           };
       });
       setLayerToDelete(null);
@@ -195,15 +344,26 @@ const Controls: React.FC<ControlsProps> = ({
 
   const handleToggleVisible = (id: string, e: React.MouseEvent) => {
       e.stopPropagation();
-      setDesign(prev => ({
-          ...prev,
-          layers: prev.layers.map(l => l.id === id ? { ...l, visible: !l.visible } : l)
-      }));
+      setDesign(prev => {
+          // If target is in selection, toggle all selected
+          const targetIsSelected = prev.selectedLayerIds.includes(id);
+          const idsToToggle = targetIsSelected ? prev.selectedLayerIds : [id];
+          
+          // Determine target state based on the clicked item
+          const clickedLayer = prev.layers.find(l => l.id === id);
+          const targetState = !clickedLayer?.visible;
+
+          return {
+              ...prev,
+              layers: prev.layers.map(l => idsToToggle.includes(l.id) ? { ...l, visible: targetState } : l)
+          };
+      });
   };
 
   const moveLayer = (id: string, direction: 'forward' | 'backward', e: React.MouseEvent) => {
       e.stopPropagation();
       setDesign(prev => {
+          // Moving multiple layers is complex. Only move clicked layer for now.
           const index = prev.layers.findIndex(l => l.id === id);
           if (index === -1) return prev;
           
@@ -238,9 +398,6 @@ const Controls: React.FC<ControlsProps> = ({
             <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-pink-500 to-violet-500 mb-1">
             ///textrot studio
             </h2>
-            {/*<p className="text-xs text-neutral-400">
-            Visuals by Gemini 3 Pro.<br/>Typography by You.
-            </p>*/}
         </div>
         <div className="flex items-center gap-2">
             <button 
@@ -255,7 +412,7 @@ const Controls: React.FC<ControlsProps> = ({
 
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         
-        {/* Generator Section (Controlled by panelState.gen but no shortcut toggle) */}
+        {/* Generator Section */}
         <CollapsibleSection 
             title="Image Generator" 
             icon={Wand2} 
@@ -346,7 +503,7 @@ const Controls: React.FC<ControlsProps> = ({
             <div className={`transition-all duration-300 ${!hasImage ? 'opacity-40 pointer-events-none filter grayscale' : ''}`}>
                 <div className="flex items-center justify-between mb-3">
                     <div className="text-xs text-neutral-500">
-                        Manage Stacking Order
+                        {design.selectedLayerIds.length > 1 ? `${design.selectedLayerIds.length} Layers Selected` : 'Manage Stacking Order'}
                     </div>
                     <button onClick={handleAddLayer} className="text-neutral-400 hover:text-white hover:bg-neutral-800 p-1 rounded-[3px] transition-colors">
                         <Plus size={16} />
@@ -358,16 +515,28 @@ const Controls: React.FC<ControlsProps> = ({
                         const originalIndex = design.layers.findIndex(l => l.id === layer.id);
                         const isTop = originalIndex === design.layers.length - 1;
                         const isBottom = originalIndex === 0;
+                        const isSelected = design.selectedLayerIds.includes(layer.id);
+                        const isActive = layer.id === design.activeLayerId;
+                        const hasPath = layer.pathPoints.length > 0;
 
                         return (
                         <div 
                             key={layer.id}
-                            onClick={() => updateGlobal('activeLayerId', layer.id)}
-                            className={`flex items-center justify-between p-2 text-xs border-b border-neutral-800 last:border-0 cursor-pointer group ${layer.id === design.activeLayerId ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:bg-neutral-900'}`}
+                            onClick={(e) => handleLayerClick(layer.id, e)}
+                            className={`flex items-center justify-between p-2 text-xs border-b border-neutral-800 last:border-0 cursor-pointer group ${
+                                isSelected 
+                                ? (isActive ? 'bg-neutral-800 text-white' : 'bg-neutral-800/50 text-neutral-300') 
+                                : 'text-neutral-400 hover:bg-neutral-900'
+                            }`}
                         >
-                            <div className="flex items-center gap-2 overflow-hidden">
-                                 <span className="font-mono opacity-50 select-none">T</span>
-                                 <span className="truncate max-w-[120px]">{layer.textOverlay || 'Empty Text'}</span>
+                            <div className="flex items-center gap-2 overflow-hidden flex-1">
+                                 <span className={`font-mono select-none ${isActive ? 'text-pink-500' : 'opacity-50'}`}>T</span>
+                                 <span className="truncate max-w-[100px]">{layer.textOverlay || 'Empty Text'}</span>
+                                 {hasPath && (
+                                     <Tooltip content="Path Text Enabled">
+                                         <Route size={12} className="text-pink-400 opacity-80" />
+                                     </Tooltip>
+                                 )}
                             </div>
                             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                  <div className="flex flex-col gap-0.5 mr-2">
@@ -415,12 +584,18 @@ const Controls: React.FC<ControlsProps> = ({
               isOpen={panelState.content}
               onToggle={() => togglePanel('content')}
           >
-            <textarea 
-              className="w-full bg-neutral-950 border border-neutral-800 rounded-[3px] p-2 text-sm focus:border-pink-500 outline-none resize-y"
-              rows={2}
-              value={activeLayer.textOverlay}
-              onChange={(e) => updateLayer('textOverlay', e.target.value)}
-            />
+            {design.selectedLayerIds.length > 1 ? (
+                <div className="p-4 bg-neutral-950 border border-neutral-800 rounded-[3px] text-center text-xs text-neutral-500 italic">
+                    Multi-edit enabled for style properties.<br/>Select single layer to edit text content.
+                </div>
+            ) : (
+                <textarea 
+                  className="w-full bg-neutral-950 border border-neutral-800 rounded-[3px] p-2 text-sm focus:border-pink-500 outline-none resize-y"
+                  rows={2}
+                  value={activeLayer.textOverlay}
+                  onChange={(e) => updateLayer('textOverlay', e.target.value)}
+                />
+            )}
           </CollapsibleSection>
 
           {/* Typography (Shift+3) */}
@@ -444,6 +619,7 @@ const Controls: React.FC<ControlsProps> = ({
                         <span className="block text-sm text-white" style={{ fontFamily: activeLayer.fontFamily }}>
                             {activeLayer.fontFamily}
                         </span>
+                        {design.selectedLayerIds.length > 1 && <span className="text-[10px] text-neutral-500">Ap. to all selected</span>}
                     </div>
                 </div>
                 <BookType size={16} className="text-neutral-600 group-hover:text-white transition-colors" />
@@ -549,7 +725,7 @@ const Controls: React.FC<ControlsProps> = ({
                           type="range" min="0" max="360" step="1" value={Math.round(activeLayer.rotation)}
                           onChange={(e) => {
                               let val = parseInt(e.target.value);
-                              const snapPoints = [0, 90, 180, 270, 360];
+                              const snapPoints = [0, 45, 90, 135, 180, 225, 270, 315, 360];
                               for (const point of snapPoints) if (Math.abs(val - point) <= 15) { val = point; break; }
                               updateLayer('rotation', val);
                           }}
@@ -558,7 +734,7 @@ const Controls: React.FC<ControlsProps> = ({
                           title="Double-click to reset"
                       />
                       <div className="absolute inset-0 flex items-center pointer-events-none z-20">
-                         {[90, 180, 270].map(deg => <div key={deg} className={`absolute w-1 h-1 rounded-full -translate-x-1/2 transition-all duration-300 ${activeLayer.rotation === deg ? 'bg-pink-500 w-2 h-2' : 'bg-neutral-600'}`} style={{ left: `${(deg/360)*100}%` }} />)}
+                         {[45, 90, 135, 180, 225, 270, 315].map(deg => <div key={deg} className={`absolute w-1 h-1 rounded-full -translate-x-1/2 transition-all duration-300 ${activeLayer.rotation === deg ? 'bg-pink-500 w-2 h-2' : 'bg-neutral-600'}`} style={{ left: `${(deg/360)*100}%` }} />)}
                       </div>
                   </div>
             </div>
@@ -571,50 +747,58 @@ const Controls: React.FC<ControlsProps> = ({
               isOpen={panelState.path}
               onToggle={() => togglePanel('path')}
           >
-            <div className="flex gap-2">
-                <button 
-                    onClick={() => updateLayer('isPathInputMode', !activeLayer.isPathInputMode)}
-                    disabled={activeLayer.isPathMoveMode}
-                    className={`flex-1 py-2 px-3 rounded-[3px] flex items-center justify-center gap-2 text-xs font-medium border transition-all ${activeLayer.isPathInputMode ? 'bg-pink-500/10 text-pink-500 border-pink-500' : 'bg-neutral-950 text-neutral-400 border-neutral-800 hover:bg-neutral-900 disabled:opacity-50'}`}
-                >
-                    <PenTool size={14} /> {activeLayer.isPathInputMode ? 'Drawing Active' : 'Draw Path'}
-                </button>
-
-                {activeLayer.pathPoints.length > 0 && (
+            {design.selectedLayerIds.length > 1 ? (
+                 <div className="p-4 bg-neutral-950 border border-neutral-800 rounded-[3px] text-center text-xs text-neutral-500 italic">
+                     Select a single layer to use Path Tools.
+                 </div>
+            ) : (
+                <>
+                <div className="flex gap-2">
                     <button 
-                        onClick={() => updateLayer('isPathMoveMode', !activeLayer.isPathMoveMode)}
-                        disabled={activeLayer.isPathInputMode}
-                        className={`flex-1 py-2 px-3 rounded-[3px] flex items-center justify-center gap-2 text-xs font-medium border transition-all ${activeLayer.isPathMoveMode ? 'bg-pink-500/10 text-pink-500 border-pink-500' : 'bg-neutral-950 text-neutral-400 border-neutral-800 hover:bg-neutral-900 disabled:opacity-50'}`}
+                        onClick={() => updateLayer('isPathInputMode', !activeLayer.isPathInputMode)}
+                        disabled={activeLayer.isPathMoveMode}
+                        className={`flex-1 py-2 px-3 rounded-[3px] flex items-center justify-center gap-2 text-xs font-medium border transition-all ${activeLayer.isPathInputMode ? 'bg-pink-500/10 text-pink-500 border-pink-500' : 'bg-neutral-950 text-neutral-400 border-neutral-800 hover:bg-neutral-900 disabled:opacity-50'}`}
                     >
-                        <Move size={14} /> Modify Path
+                        <PenTool size={14} /> {activeLayer.isPathInputMode ? 'Drawing Active' : 'Draw Path'}
                     </button>
-                )}
+
+                    {activeLayer.pathPoints.length > 0 && (
+                        <button 
+                            onClick={() => updateLayer('isPathMoveMode', !activeLayer.isPathMoveMode)}
+                            disabled={activeLayer.isPathInputMode}
+                            className={`flex-1 py-2 px-3 rounded-[3px] flex items-center justify-center gap-2 text-xs font-medium border transition-all ${activeLayer.isPathMoveMode ? 'bg-pink-500/10 text-pink-500 border-pink-500' : 'bg-neutral-950 text-neutral-400 border-neutral-800 hover:bg-neutral-900 disabled:opacity-50'}`}
+                        >
+                            <Move size={14} /> Modify Path
+                        </button>
+                    )}
+
+                    {activeLayer.pathPoints.length > 0 && (
+                        <button 
+                            onClick={() => {
+                                if (!design.activeLayerId) return;
+                                setDesign(prev => ({
+                                    ...prev,
+                                    layers: prev.layers.map(l => l.id === prev.activeLayerId ? { 
+                                        ...l, 
+                                        pathPoints: [], 
+                                        isPathMoveMode: false,
+                                        isPathInputMode: false 
+                                    } : l)
+                                }));
+                            }}
+                            className="w-10 flex items-center justify-center rounded-[3px] bg-neutral-950 border border-neutral-800 text-neutral-400 hover:text-red-400 hover:border-red-400/50 transition-colors"
+                        >
+                            <Trash2 size={14} />
+                        </button>
+                    )}
+                </div>
 
                 {activeLayer.pathPoints.length > 0 && (
-                     <button 
-                        onClick={() => {
-                            if (!design.activeLayerId) return;
-                            setDesign(prev => ({
-                                ...prev,
-                                layers: prev.layers.map(l => l.id === prev.activeLayerId ? { 
-                                    ...l, 
-                                    pathPoints: [], 
-                                    isPathMoveMode: false,
-                                    isPathInputMode: false 
-                                } : l)
-                            }));
-                        }}
-                        className="w-10 flex items-center justify-center rounded-[3px] bg-neutral-950 border border-neutral-800 text-neutral-400 hover:text-red-400 hover:border-red-400/50 transition-colors"
-                     >
-                         <Trash2 size={14} />
-                     </button>
+                    <div className="pt-2 border-t border-neutral-800/50 animate-in slide-in-from-top-2 fade-in">
+                        <SliderControl label="Smoothing" icon={Activity} value={activeLayer.pathSmoothing} setValue={(v) => updateLayer('pathSmoothing', v)} min="0" max="200" step="1" defaultValue={5} />
+                    </div>
                 )}
-            </div>
-
-            {activeLayer.pathPoints.length > 0 && (
-                <div className="pt-2 border-t border-neutral-800/50 animate-in slide-in-from-top-2 fade-in">
-                    <SliderControl label="Smoothing" icon={Activity} value={activeLayer.pathSmoothing} setValue={(v) => updateLayer('pathSmoothing', v)} min="0" max="200" step="1" defaultValue={5} />
-                </div>
+                </>
             )}
           </CollapsibleSection>
 
