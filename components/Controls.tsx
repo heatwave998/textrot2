@@ -66,7 +66,9 @@ const Controls: React.FC<ControlsProps> = ({
     typography: true,
     appearance: false,
     transform: false,
-    path: false
+    path: false,
+    effects: false,
+    blending: false
   });
 
   const togglePanel = (key: keyof typeof panelState) => {
@@ -74,14 +76,16 @@ const Controls: React.FC<ControlsProps> = ({
   };
 
   // Keyboard Shortcuts for Panel Toggles
+  // Mapped as requested: Shift+1 for Layers through Shift+8 for Blending
   useKeyboard([
-    { id: 'toggle-gen', combo: { code: 'Digit1', shift: true }, action: () => togglePanel('gen') },
-    { id: 'toggle-layers', combo: { code: 'Digit2', shift: true }, action: () => togglePanel('layers') },
-    { id: 'toggle-content', combo: { code: 'Digit3', shift: true }, action: () => togglePanel('content') },
-    { id: 'toggle-typography', combo: { code: 'Digit4', shift: true }, action: () => togglePanel('typography') },
-    { id: 'toggle-appearance', combo: { code: 'Digit5', shift: true }, action: () => togglePanel('appearance') },
-    { id: 'toggle-transform', combo: { code: 'Digit6', shift: true }, action: () => togglePanel('transform') },
-    { id: 'toggle-path', combo: { code: 'Digit7', shift: true }, action: () => togglePanel('path') },
+    { id: 'toggle-layers', combo: { code: 'Digit1', shift: true }, action: () => togglePanel('layers') },
+    { id: 'toggle-content', combo: { code: 'Digit2', shift: true }, action: () => togglePanel('content') },
+    { id: 'toggle-typography', combo: { code: 'Digit3', shift: true }, action: () => togglePanel('typography') },
+    { id: 'toggle-appearance', combo: { code: 'Digit4', shift: true }, action: () => togglePanel('appearance') },
+    { id: 'toggle-transform', combo: { code: 'Digit5', shift: true }, action: () => togglePanel('transform') },
+    { id: 'toggle-path', combo: { code: 'Digit6', shift: true }, action: () => togglePanel('path') },
+    { id: 'toggle-effects', combo: { code: 'Digit7', shift: true }, action: () => togglePanel('effects') },
+    { id: 'toggle-blending', combo: { code: 'Digit8', shift: true }, action: () => togglePanel('blending') },
   ]);
 
   // Keyboard States
@@ -234,9 +238,9 @@ const Controls: React.FC<ControlsProps> = ({
             <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-pink-500 to-violet-500 mb-1">
             ///textrot studio
             </h2>
-            <p className="text-xs text-neutral-400">
+            {/*<p className="text-xs text-neutral-400">
             Visuals by Gemini 3 Pro.<br/>Typography by You.
-            </p>
+            </p>*/}
         </div>
         <div className="flex items-center gap-2">
             <button 
@@ -251,7 +255,7 @@ const Controls: React.FC<ControlsProps> = ({
 
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         
-        {/* Generator Section (Shift+1) */}
+        {/* Generator Section (Controlled by panelState.gen but no shortcut toggle) */}
         <CollapsibleSection 
             title="Image Generator" 
             icon={Wand2} 
@@ -332,7 +336,7 @@ const Controls: React.FC<ControlsProps> = ({
           </div>
         </CollapsibleSection>
 
-        {/* Layers Section (Shift+2) */}
+        {/* Layers Section (Shift+1) */}
         <CollapsibleSection 
             title="Layers" 
             icon={Layers} 
@@ -404,7 +408,7 @@ const Controls: React.FC<ControlsProps> = ({
         {hasImage && activeLayer ? (
         <div className="animate-in slide-in-from-bottom-4 fade-in duration-300 pb-12">
           
-          {/* Text Content (Shift+3) */}
+          {/* Text Content (Shift+2) */}
           <CollapsibleSection 
               title="Text Content" 
               icon={Type} 
@@ -419,7 +423,7 @@ const Controls: React.FC<ControlsProps> = ({
             />
           </CollapsibleSection>
 
-          {/* Typography (Shift+4) */}
+          {/* Typography (Shift+3) */}
           <CollapsibleSection 
               title="Typography" 
               icon={Palette} 
@@ -485,7 +489,7 @@ const Controls: React.FC<ControlsProps> = ({
             </div>
           </CollapsibleSection>
 
-          {/* Appearance (Shift+5) */}
+          {/* Appearance (Shift+4) */}
           <CollapsibleSection 
               title="Appearance" 
               icon={Palette} 
@@ -523,7 +527,7 @@ const Controls: React.FC<ControlsProps> = ({
             </div>
           </CollapsibleSection>
 
-          {/* Transform (Shift+6) */}
+          {/* Transform (Shift+5) */}
           <CollapsibleSection 
               title="Transform" 
               icon={Move} 
@@ -560,7 +564,7 @@ const Controls: React.FC<ControlsProps> = ({
             </div>
           </CollapsibleSection>
 
-          {/* Path Tool (Shift+7) */}
+          {/* Path Tool (Shift+6) */}
           <CollapsibleSection 
               title="Path Tool" 
               icon={Route} 
@@ -614,9 +618,22 @@ const Controls: React.FC<ControlsProps> = ({
             )}
           </CollapsibleSection>
 
-          <EffectsControls design={design} update={(k, v) => updateLayer(k as keyof TextLayer, v)} toggle={(k) => toggleLayer(k as keyof TextLayer)} />
+          {/* Effects (Shift+7) */}
+          <EffectsControls 
+            design={design} 
+            update={(k, v) => updateLayer(k as keyof TextLayer, v)} 
+            toggle={(k) => toggleLayer(k as keyof TextLayer)}
+            isOpen={panelState.effects}
+            onToggle={() => togglePanel('effects')}
+          />
 
-          <CollapsibleSection title="Blending" icon={BoxSelect} defaultOpen={false}>
+          {/* Blending (Shift+8) */}
+          <CollapsibleSection 
+            title="Blending" 
+            icon={BoxSelect} 
+            isOpen={panelState.blending}
+            onToggle={() => togglePanel('blending')}
+          >
             <select 
               className="w-full bg-neutral-950 border border-neutral-800 rounded-[3px] p-2 text-sm outline-none"
               value={activeLayer.blendMode}

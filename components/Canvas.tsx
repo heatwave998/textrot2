@@ -822,17 +822,21 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
         } else {
             const c1 = layer.effectColor;
             const c2 = layer.effectColor2;
+
+            // Calculate direction vector for standard glitch
+            const dx = Math.cos(angleRad) * offset;
+            const dy = Math.sin(angleRad) * offset;
             
             ctx.save();
             ctx.globalAlpha = 1.0; 
             ctx.globalCompositeOperation = 'screen'; 
-            drawTextItem(rawText, -offset, 0, c1, false);
+            drawTextItem(rawText, -dx, -dy, c1, false);
             ctx.restore();
 
             ctx.save();
             ctx.globalAlpha = 1.0; 
             ctx.globalCompositeOperation = 'screen';
-            drawTextItem(rawText, offset, 0, c2, false); 
+            drawTextItem(rawText, dx, dy, c2, false); 
             ctx.restore();
         }
     }

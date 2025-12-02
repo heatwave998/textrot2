@@ -9,15 +9,22 @@ interface EffectsControlsProps {
   design: DesignState;
   update: (key: keyof TextLayer, value: any) => void;
   toggle: (key: keyof TextLayer) => void;
+  isOpen: boolean;
+  onToggle: () => void;
 }
 
-const EffectsControls: React.FC<EffectsControlsProps> = ({ design, update, toggle }) => {
+const EffectsControls: React.FC<EffectsControlsProps> = ({ design, update, toggle, isOpen, onToggle }) => {
   const activeLayer = design.layers.find(l => l.id === design.activeLayerId);
   
   if (!activeLayer) return null;
 
   return (
-    <CollapsibleSection title="Effects" icon={CircleDashed} defaultOpen={false}>
+    <CollapsibleSection 
+        title="Effects" 
+        icon={CircleDashed} 
+        isOpen={isOpen}
+        onToggle={onToggle}
+    >
         <div className="flex gap-2">
             <button
                 onClick={() => toggle('isHollow')}
@@ -123,8 +130,8 @@ const EffectsControls: React.FC<EffectsControlsProps> = ({ design, update, toggl
                 defaultValue={50}
             />
             
-            {/* Angle/Direction Slider (Echo, Gradient, and Rainbow Glitch) */}
-            {(activeLayer.specialEffect === 'echo' || activeLayer.specialEffect === 'gradient' || (activeLayer.specialEffect === 'glitch' && activeLayer.isRainbowGlitch)) && (
+            {/* Angle/Direction Slider (Echo, Gradient, and Glitch) */}
+            {(activeLayer.specialEffect === 'echo' || activeLayer.specialEffect === 'gradient' || activeLayer.specialEffect === 'glitch') && (
                     <div className="w-full">
                     <div className="flex items-center justify-between mb-1.5">
                         <label className="text-[10px] text-neutral-500 flex items-center gap-1.5">
