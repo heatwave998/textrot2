@@ -15,7 +15,7 @@ import EffectsControls from './EffectsControls';
 import ConfirmationModal from './ConfirmationModal';
 import FontBookModal from './FontBookModal';
 import CollapsibleSection from './CollapsibleSection';
-import { useIsKeyPressed } from '../hooks/useKeyboard';
+import { useIsKeyPressed, useKeyboard } from '../hooks/useKeyboard';
 import { FONTS } from '../constants';
 
 interface ControlsProps {
@@ -57,6 +57,32 @@ const Controls: React.FC<ControlsProps> = ({
   const [layerToDelete, setLayerToDelete] = useState<string | null>(null);
   const [hoveredControl, setHoveredControl] = useState<string | null>(null);
   const [isFontBookOpen, setIsFontBookOpen] = useState(false);
+
+  // Panel State for Keyboard Shortcuts
+  const [panelState, setPanelState] = useState({
+    gen: true,
+    layers: true,
+    content: true,
+    typography: true,
+    appearance: false,
+    transform: false,
+    path: false
+  });
+
+  const togglePanel = (key: keyof typeof panelState) => {
+    setPanelState(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  // Keyboard Shortcuts for Panel Toggles
+  useKeyboard([
+    { id: 'toggle-gen', combo: { code: 'Digit1', shift: true }, action: () => togglePanel('gen') },
+    { id: 'toggle-layers', combo: { code: 'Digit2', shift: true }, action: () => togglePanel('layers') },
+    { id: 'toggle-content', combo: { code: 'Digit3', shift: true }, action: () => togglePanel('content') },
+    { id: 'toggle-typography', combo: { code: 'Digit4', shift: true }, action: () => togglePanel('typography') },
+    { id: 'toggle-appearance', combo: { code: 'Digit5', shift: true }, action: () => togglePanel('appearance') },
+    { id: 'toggle-transform', combo: { code: 'Digit6', shift: true }, action: () => togglePanel('transform') },
+    { id: 'toggle-path', combo: { code: 'Digit7', shift: true }, action: () => togglePanel('path') },
+  ]);
 
   // Keyboard States
   const isShiftPressed = useIsKeyPressed('Shift');
@@ -225,8 +251,13 @@ const Controls: React.FC<ControlsProps> = ({
 
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         
-        {/* Generator Section */}
-        <CollapsibleSection title="Image Generator" icon={Wand2} defaultOpen={true}>
+        {/* Generator Section (Shift+1) */}
+        <CollapsibleSection 
+            title="Image Generator" 
+            icon={Wand2} 
+            isOpen={panelState.gen}
+            onToggle={() => togglePanel('gen')}
+        >
           <div className="space-y-4 pt-1">
             <div className="flex items-center justify-between">
                 <label className="block text-xs font-bold text-neutral-200 uppercase tracking-wider">Image Prompt</label>
@@ -301,8 +332,13 @@ const Controls: React.FC<ControlsProps> = ({
           </div>
         </CollapsibleSection>
 
-        {/* Layers Section */}
-        <CollapsibleSection title="Layers" icon={Layers} defaultOpen={true}>
+        {/* Layers Section (Shift+2) */}
+        <CollapsibleSection 
+            title="Layers" 
+            icon={Layers} 
+            isOpen={panelState.layers}
+            onToggle={() => togglePanel('layers')}
+        >
             <div className={`transition-all duration-300 ${!hasImage ? 'opacity-40 pointer-events-none filter grayscale' : ''}`}>
                 <div className="flex items-center justify-between mb-3">
                     <div className="text-xs text-neutral-500">
@@ -368,8 +404,13 @@ const Controls: React.FC<ControlsProps> = ({
         {hasImage && activeLayer ? (
         <div className="animate-in slide-in-from-bottom-4 fade-in duration-300 pb-12">
           
-          {/* Text Content */}
-          <CollapsibleSection title="Text Content" icon={Type} defaultOpen={true}>
+          {/* Text Content (Shift+3) */}
+          <CollapsibleSection 
+              title="Text Content" 
+              icon={Type} 
+              isOpen={panelState.content}
+              onToggle={() => togglePanel('content')}
+          >
             <textarea 
               className="w-full bg-neutral-950 border border-neutral-800 rounded-[3px] p-2 text-sm focus:border-pink-500 outline-none resize-y"
               rows={2}
@@ -378,8 +419,13 @@ const Controls: React.FC<ControlsProps> = ({
             />
           </CollapsibleSection>
 
-          {/* Typography */}
-          <CollapsibleSection title="Typography" icon={Palette} defaultOpen={true}>
+          {/* Typography (Shift+4) */}
+          <CollapsibleSection 
+              title="Typography" 
+              icon={Palette} 
+              isOpen={panelState.typography}
+              onToggle={() => togglePanel('typography')}
+          >
             
             {/* Font Book Button */}
             <button 
@@ -391,7 +437,6 @@ const Controls: React.FC<ControlsProps> = ({
                         Aa
                     </div>
                     <div>
-                        <span className="block text-xs text-neutral-500 font-medium">Font Family</span>
                         <span className="block text-sm text-white" style={{ fontFamily: activeLayer.fontFamily }}>
                             {activeLayer.fontFamily}
                         </span>
@@ -440,8 +485,13 @@ const Controls: React.FC<ControlsProps> = ({
             </div>
           </CollapsibleSection>
 
-          {/* Appearance */}
-          <CollapsibleSection title="Appearance" icon={Palette} defaultOpen={false}>
+          {/* Appearance (Shift+5) */}
+          <CollapsibleSection 
+              title="Appearance" 
+              icon={Palette} 
+              isOpen={panelState.appearance}
+              onToggle={() => togglePanel('appearance')}
+          >
             <div className="grid grid-cols-2 gap-2">
               <div>
                   <div className="flex items-center mb-1 h-9"><label className="text-[10px] text-neutral-500 block">Text Color</label></div>
@@ -473,8 +523,13 @@ const Controls: React.FC<ControlsProps> = ({
             </div>
           </CollapsibleSection>
 
-          {/* Transform */}
-          <CollapsibleSection title="Transform" icon={Move} defaultOpen={false}>
+          {/* Transform (Shift+6) */}
+          <CollapsibleSection 
+              title="Transform" 
+              icon={Move} 
+              isOpen={panelState.transform}
+              onToggle={() => togglePanel('transform')}
+          >
             <div className="grid grid-cols-2 gap-4">
                 <SliderControl label="X Pos" icon={MoveHorizontal} value={activeLayer.overlayPosition.x} setValue={(v) => updatePosition('x', v)} min="0" max="100" step="1" suffix="%" defaultValue={50} />
                 <SliderControl label="Y Pos" icon={MoveVertical} value={100 - activeLayer.overlayPosition.y} setValue={(v) => updatePosition('y', 100 - v)} min="0" max="100" step="1" suffix="%" defaultValue={50} />
@@ -505,8 +560,13 @@ const Controls: React.FC<ControlsProps> = ({
             </div>
           </CollapsibleSection>
 
-          {/* Text Path Tool */}
-          <CollapsibleSection title="Path Tool" icon={Route} defaultOpen={false}>
+          {/* Path Tool (Shift+7) */}
+          <CollapsibleSection 
+              title="Path Tool" 
+              icon={Route} 
+              isOpen={panelState.path}
+              onToggle={() => togglePanel('path')}
+          >
             <div className="flex gap-2">
                 <button 
                     onClick={() => updateLayer('isPathInputMode', !activeLayer.isPathInputMode)}

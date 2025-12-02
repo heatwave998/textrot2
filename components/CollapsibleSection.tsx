@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { ChevronDown, LucideIcon } from 'lucide-react';
 
 interface CollapsibleSectionProps {
@@ -8,6 +9,8 @@ interface CollapsibleSectionProps {
   defaultOpen?: boolean;
   className?: string;
   headerClassName?: string;
+  isOpen?: boolean;
+  onToggle?: () => void;
 }
 
 const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({ 
@@ -16,14 +19,27 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
   children, 
   defaultOpen = true,
   className = '',
-  headerClassName = ''
+  headerClassName = '',
+  isOpen: controlledIsOpen,
+  onToggle: controlledOnToggle
 }) => {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
+  const [internalIsOpen, setInternalIsOpen] = useState(defaultOpen);
+
+  const isControlled = controlledIsOpen !== undefined;
+  const isOpen = isControlled ? controlledIsOpen : internalIsOpen;
+
+  const handleToggle = () => {
+    if (isControlled && controlledOnToggle) {
+      controlledOnToggle();
+    } else {
+      setInternalIsOpen(!internalIsOpen);
+    }
+  };
 
   return (
     <div className={`border-b border-neutral-800 ${className}`}>
       <button 
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={handleToggle}
         className={`w-full flex items-center justify-between py-4 px-6 hover:bg-neutral-800/30 transition-colors group focus:outline-none ${headerClassName}`}
       >
         <div className="flex items-center gap-2 text-neutral-400 group-hover:text-neutral-200 transition-colors">

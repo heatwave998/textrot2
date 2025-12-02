@@ -2,7 +2,8 @@
 import { useEffect, useCallback, useState } from 'react';
 
 export type KeyCombo = {
-  key: string;
+  key?: string;
+  code?: string;
   ctrl?: boolean;
   shift?: boolean;
   alt?: boolean;
@@ -30,15 +31,27 @@ export const useKeyboard = (shortcuts: KeyboardShortcut[]) => {
       }
 
       shortcuts.forEach((shortcut) => {
-        const { key, ctrl, shift, alt } = shortcut.combo;
+        const { key, code, ctrl, shift, alt, meta } = shortcut.combo;
 
-        const keyMatch = e.key.toLowerCase() === key.toLowerCase();
-        // Treat meta (Command on Mac) as equivalent to Ctrl for standard shortcuts
-        const ctrlMatch = !!ctrl === (e.ctrlKey || e.metaKey); 
+        // Check Key (Character) match if provided
+        const keyMatch = key ? e.key.toLowerCase() === key.toLowerCase() : true;
+        
+        // Check Code (Physical Key) match if provided (e.g., 'Digit1')
+        const codeMatch = code ? e.code === code : true;
+
+        // Ensure at least one identifier was provided and matched
+        if (!key && !code) return;
+        if (!keyMatch || !codeMatch) return;
+
+        // Check Modifiers
+        const ctrlMatch = !!ctrl === (e.ctrlKey || e.metaKey); // Treat meta as ctrl on Mac often, or explicit meta
+        // If meta is explicitly requested, check it strictly, otherwise fallback to standard ctrl/meta alias behavior
+        const metaStrictMatch = meta !== undefined ? !!meta === e.metaKey : true;
+        
         const shiftMatch = !!shift === e.shiftKey;
         const altMatch = !!alt === e.altKey;
 
-        if (keyMatch && ctrlMatch && shiftMatch && altMatch) {
+        if (ctrlMatch && shiftMatch && altMatch && metaStrictMatch) {
           e.preventDefault();
           shortcut.action(e);
         }
