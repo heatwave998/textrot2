@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef } from 'react';
 import Canvas, { CanvasHandle } from './components/Canvas';
 import Controls from './components/Controls';
@@ -75,7 +76,8 @@ const DEFAULT_DESIGN: DesignState = {
 
 const DEFAULT_SETTINGS: AppSettings = {
   enableZoom: true,
-  googleApiKey: ''
+  googleApiKey: '',
+  imageModel: 'gemini-3-pro-image-preview'
 };
 
 interface ImageHistoryItem {
@@ -160,7 +162,13 @@ export default function App() {
     setIsGenerating(true);
 
     try {
-      const imagePromise = generateBackgroundImage(design.prompt, design.aspectRatio, design.orientation, settings.googleApiKey);
+      const imagePromise = generateBackgroundImage(
+          design.prompt, 
+          design.aspectRatio, 
+          design.orientation, 
+          settings.googleApiKey,
+          settings.imageModel
+      );
       const imgData = await imagePromise;
 
       addToHistory(imgData, design.aspectRatio, design.orientation);
@@ -209,7 +217,14 @@ export default function App() {
       
       setIsGenerating(true);
       try {
-          const editedImgData = await editImage(imageSrc, design.prompt, settings.googleApiKey);
+          const editedImgData = await editImage(
+              imageSrc, 
+              design.prompt, 
+              design.aspectRatio, 
+              design.orientation, 
+              settings.googleApiKey,
+              settings.imageModel
+          );
           addToHistory(editedImgData, design.aspectRatio, design.orientation);
       } catch (error) {
           alert("Failed to edit image. Ensure your API key is valid.");

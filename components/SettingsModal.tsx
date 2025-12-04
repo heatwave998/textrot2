@@ -1,7 +1,9 @@
 
+
+
 import React, { useState } from 'react';
-import { X, MousePointer2, Settings, Cloud, Key } from 'lucide-react';
-import { AppSettings } from '../types';
+import { X, MousePointer2, Settings, Cloud, Key, Cpu, ChevronDown } from 'lucide-react';
+import { AppSettings, GenModel } from '../types';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -117,6 +119,26 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     />
                     <p className="text-[10px] text-neutral-500 leading-relaxed">
                         Leave blank to use the default system key. Providing your own key allows for personal quota usage.
+                    </p>
+                </div>
+
+                <div className="space-y-2 pt-2 border-t border-neutral-800">
+                    <label className="text-xs font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-2">
+                        <Cpu size={14} /> Image Generation Model
+                    </label>
+                    <div className="relative">
+                        <select
+                            value={settings.imageModel}
+                            onChange={(e) => onSettingsChange({ ...settings, imageModel: e.target.value as GenModel })}
+                            className="w-full bg-neutral-950 border border-neutral-800 rounded-[3px] p-2.5 text-sm text-white focus:outline-none focus:border-pink-500 transition-colors appearance-none cursor-pointer"
+                        >
+                            <option value="gemini-3-pro-image-preview">Nano Banana Pro (Gemini 3 Pro)</option>
+                            <option value="gemini-2.5-flash-image">Nano Banana (Gemini 2.5 Flash)</option>
+                        </select>
+                        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none" />
+                    </div>
+                    <p className="text-[10px] text-neutral-500 leading-relaxed">
+                        Pro offers 4K resolution and higher fidelity. Flash is faster but lower resolution.
                     </p>
                 </div>
             </div>

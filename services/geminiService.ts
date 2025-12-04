@@ -1,7 +1,7 @@
 
 
 import { GoogleGenAI, Modality } from "@google/genai";
-import { AspectRatio } from "../types";
+import { AspectRatio, Orientation, GenModel } from "../types";
 
 // Initialize default client
 const defaultAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -14,56 +14,64 @@ const getClient = (apiKey?: string) => {
     return defaultAi;
 };
 
+// Helper to determine the API-compatible aspect ratio string
+const getApiAspectRatio = (aspectRatio: AspectRatio, orientation: Orientation): string => {
+    // API supports: "1:1", "3:4", "4:3", "9:16", "16:9"
+    if (aspectRatio === '1:1') return '1:1';
+    
+    if (aspectRatio === '16:9') {
+        return orientation === 'portrait' ? '9:16' : '16:9';
+    } 
+    
+    if (aspectRatio === '4:3') {
+        return orientation === 'portrait' ? '3:4' : '4:3';
+    } 
+    
+    if (aspectRatio === '3:2') {
+        // 3:2 is not natively supported by Gemini 3 Pro Image Preview. 
+        // We map it to the closest available ratio (4:3 / 3:4).
+        return orientation === 'portrait' ? '3:4' : '4:3';
+    }
+
+    // Default fallback
+    return orientation === 'portrait' ? '3:4' : '4:3';
+};
+
 /**
- * Generates the visual background using Gemini 3 Pro Image Preview.
- * Configured for 2K resolution (2048px).
- * Reverted to this model due to permission issues with Imagen 4.0.
+ * Generates the visual background using Gemini models.
+ * Supports switching between Nano Banana Pro (Gemini 3 Pro) and Nano Banana (Gemini 2.5 Flash).
  */
 export const generateBackgroundImage = async (
     prompt: string, 
     aspectRatio: AspectRatio, 
     orientation: 'landscape' | 'portrait' = 'landscape',
-    apiKey?: string
+    apiKey?: string,
+    model: GenModel = 'gemini-3-pro-image-preview'
 ): Promise<string> => {
   try {
     const ai = getClient(apiKey);
+    const targetRatio = getApiAspectRatio(aspectRatio, orientation);
 
-    // Determine the API-compatible aspect ratio string
-    // API supports: "1:1", "3:4", "4:3", "9:16", "16:9"
-    // We map our app's "Ratio + Orientation" state to these explicit API values.
-    let targetRatio = '1:1';
-    
-    if (aspectRatio === '1:1') {
-        targetRatio = '1:1';
-    } else if (aspectRatio === '16:9') {
-        // 16:9 Landscape or 9:16 Portrait
-        targetRatio = orientation === 'portrait' ? '9:16' : '16:9';
-    } else if (aspectRatio === '4:3') {
-        // 4:3 Landscape or 3:4 Portrait
-        targetRatio = orientation === 'portrait' ? '3:4' : '4:3';
-    } else if (aspectRatio === '3:2') {
-        // 3:2 is not natively supported by Gemini 3 Pro Image Preview. 
-        // We map it to the closest available ratio (4:3 / 3:4).
-        targetRatio = orientation === 'portrait' ? '3:4' : '4:3';
-    } else {
-        // Default fallback
-        targetRatio = orientation === 'portrait' ? '3:4' : '4:3'; 
+    // Config depends on the model
+    const config: any = {
+        imageConfig: {
+            aspectRatio: targetRatio,
+        }
+    };
+
+    // Only Gemini 3 Pro Image Preview supports 'imageSize'
+    if (model === 'gemini-3-pro-image-preview') {
+        config.imageConfig.imageSize = '4K';
     }
 
-    // Using gemini-3-pro-image-preview allows for '2K' resolution request via imageConfig
     const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-image-preview',
+      model: model,
       contents: {
         parts: [
             { text: `${prompt}. High quality, cinematic lighting, negative space for text overlay, polished design aesthetic.` }
         ]
       },
-      config: {
-        imageConfig: {
-            aspectRatio: targetRatio,
-            imageSize: '2K'
-        }
-      },
+      config: config,
     });
 
     // Parse response for image part
@@ -83,11 +91,20 @@ export const generateBackgroundImage = async (
 };
 
 /**
- * Edits the existing image based on a prompt using Gemini 2.5 Flash Image.
+ * Edits the existing image based on a prompt using Gemini models.
+ * Maintains resolution and aspect ratio where possible.
  */
-export const editImage = async (imageBase64: string, prompt: string, apiKey?: string): Promise<string> => {
+export const editImage = async (
+    imageBase64: string, 
+    prompt: string, 
+    aspectRatio: AspectRatio, 
+    orientation: Orientation, 
+    apiKey?: string,
+    model: GenModel = 'gemini-3-pro-image-preview'
+): Promise<string> => {
   try {
     const ai = getClient(apiKey);
+    const targetRatio = getApiAspectRatio(aspectRatio, orientation);
     
     // Extract pure base64 and mime type from Data URL
     const matches = imageBase64.match(/^data:(.+);base64,(.+)$/);
@@ -97,9 +114,21 @@ export const editImage = async (imageBase64: string, prompt: string, apiKey?: st
     const mimeType = matches[1];
     const data = matches[2];
 
-    // Use Gemini 2.5 Flash Image for editing/inpainting capabilities
+    // Config depends on the model
+    const config: any = {
+        imageConfig: {
+            aspectRatio: targetRatio,
+        }
+    };
+
+    // Only Gemini 3 Pro Image Preview supports 'imageSize'
+    if (model === 'gemini-3-pro-image-preview') {
+        config.imageConfig.imageSize = '4K';
+    }
+
+    // Use selected model for editing/inpainting capabilities
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
+      model: model,
       contents: {
         parts: [
           {
@@ -109,18 +138,20 @@ export const editImage = async (imageBase64: string, prompt: string, apiKey?: st
             },
           },
           {
-            text: `${prompt}. Maintain high quality and photorealism. Output in high resolution.`,
+            text: `${prompt}. Maintain high quality and photorealism. Output in high resolution 4K.`,
           },
         ],
       },
-      config: {
-          responseModalities: [Modality.IMAGE],
-      },
+      config: config,
     });
 
-    const part = response.candidates?.[0]?.content?.parts?.[0];
-    if (part?.inlineData?.data) {
-      return `data:image/png;base64,${part.inlineData.data}`;
+    // Parse response for image part (standard generateContent response structure)
+    for (const candidate of response.candidates || []) {
+        for (const part of candidate.content?.parts || []) {
+            if (part.inlineData && part.inlineData.data) {
+                return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+            }
+        }
     }
     
     throw new Error("No image generated from edit request");
