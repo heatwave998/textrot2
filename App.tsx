@@ -1,10 +1,10 @@
 
-
 import React, { useState, useRef } from 'react';
 import Canvas, { CanvasHandle } from './components/Canvas';
 import Controls from './components/Controls';
 import SettingsModal from './components/SettingsModal';
 import ConfirmationModal from './components/ConfirmationModal';
+import ErrorModal from './components/ErrorModal';
 import { DesignState, AppSettings, AspectRatio, Orientation, Point, TextLayer } from './types';
 import { generateBackgroundImage, editImage } from './services/geminiService';
 import { useKeyboard, KeyboardShortcut } from './hooks/useKeyboard';
@@ -93,6 +93,15 @@ export default function App() {
   const [isBlankConfirmOpen, setIsBlankConfirmOpen] = useState(false);
   const [isGenerateConfirmOpen, setIsGenerateConfirmOpen] = useState(false);
   
+  // Error Modal State
+  const [errorState, setErrorState] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    ctaLabel?: string;
+    onCta?: () => void;
+  }>({ isOpen: false, title: '', message: '' });
+  
   // Image State
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [imageHistory, setImageHistory] = useState<ImageHistoryItem[]>([]);
@@ -156,6 +165,50 @@ export default function App() {
       }
   };
 
+  // Centralized Error Handler
+  const handleApiError = (error: any) => {
+      console.error("API Error caught:", error);
+      let title = "Error";
+      let message = error instanceof Error ? error.message : "An unexpected error occurred.";
+      let ctaLabel: string | undefined;
+      let onCta: (() => void) | undefined;
+
+      // Check for common API Key / Auth errors
+      if (
+          message.includes("API key") || 
+          message.includes("403") || 
+          message.includes("permission denied") ||
+          message.includes("UNAUTHENTICATED")
+      ) {
+          title = "Authentication Failed";
+          message = "The API key is missing or invalid. Please check your settings and provide a valid Gemini API key.";
+          ctaLabel = "Open Settings";
+          onCta = () => setIsSettingsOpen(true);
+      } 
+      // Check for Quota / Rate Limit errors
+      else if (
+          message.includes("429") || 
+          message.includes("quota") || 
+          message.includes("RESOURCE_EXHAUSTED")
+      ) {
+          title = "Quota Exceeded";
+          message = "You have reached the rate limit or quota for this API key. Please try again later or use a different key.";
+      }
+      // Safety Filters
+      else if (message.includes("SAFETY") || message.includes("blocked")) {
+        title = "Content Blocked";
+        message = "The generation was blocked by safety filters. Please try modifying your prompt.";
+      }
+      
+      setErrorState({
+          isOpen: true,
+          title,
+          message,
+          ctaLabel,
+          onCta
+      });
+  };
+
   const handleGenerate = async () => {
     if (!design.prompt) return;
     
@@ -197,8 +250,7 @@ export default function App() {
       });
 
     } catch (error) {
-      alert("Something went wrong creating your masterpiece. Please check your API key or quota.");
-      console.error(error);
+      handleApiError(error);
     } finally {
       setIsGenerating(false);
     }
@@ -227,8 +279,7 @@ export default function App() {
           );
           addToHistory(editedImgData, design.aspectRatio, design.orientation);
       } catch (error) {
-          alert("Failed to edit image. Ensure your API key is valid.");
-          console.error(error);
+          handleApiError(error);
       } finally {
           setIsGenerating(false);
       }
@@ -441,6 +492,16 @@ export default function App() {
         onConfirm={handleGenerate}
         title="Generate New Image?"
         message="This will replace your current image. Any unsaved changes will be lost."
+      />
+
+      {/* API Error Modal */}
+      <ErrorModal 
+        isOpen={errorState.isOpen}
+        onClose={() => setErrorState(prev => ({ ...prev, isOpen: false }))}
+        title={errorState.title}
+        message={errorState.message}
+        ctaLabel={errorState.ctaLabel}
+        onCta={errorState.onCta}
       />
     </div>
   );
