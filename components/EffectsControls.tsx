@@ -183,24 +183,26 @@ const EffectsControls: React.FC<EffectsControlsProps> = ({ design, update, toggl
                     </label>
                     <div className="flex gap-2">
                         {/* Primary Effect Color (Left Glitch / Gradient End) */}
-                        <div className="flex-1 flex items-center gap-2 bg-neutral-950 border border-neutral-800 rounded-[3px] p-1">
+                        <div className="flex-1 flex items-center gap-2 bg-neutral-950 border border-neutral-800 rounded-[3px] p-1 h-10">
                             <input 
                                 type="color" 
                                 value={activeLayer.effectColor}
                                 onChange={(e) => update('effectColor', e.target.value)}
                                 className="w-6 h-6 rounded-[3px] cursor-pointer bg-transparent border-none"
                             />
+                            <span className="text-xs font-mono text-neutral-400">{activeLayer.effectColor}</span>
                         </div>
                         
                         {/* Secondary Effect Color (Right Glitch - Only for Glitch) */}
                         {activeLayer.specialEffect === 'glitch' && (
-                            <div className="flex-1 flex items-center gap-2 bg-neutral-950 border border-neutral-800 rounded-[3px] p-1">
+                            <div className="flex-1 flex items-center gap-2 bg-neutral-950 border border-neutral-800 rounded-[3px] p-1 h-10">
                                 <input 
                                     type="color" 
                                     value={activeLayer.effectColor2}
                                     onChange={(e) => update('effectColor2', e.target.value)}
                                     className="w-6 h-6 rounded-[3px] cursor-pointer bg-transparent border-none"
                                 />
+                                <span className="text-xs font-mono text-neutral-400">{activeLayer.effectColor2}</span>
                             </div>
                         )}
                     </div>

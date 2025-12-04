@@ -1,17 +1,33 @@
 
+
 import { GoogleGenAI, Modality } from "@google/genai";
 import { AspectRatio } from "../types";
 
-// Initialize the client
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Initialize default client
+const defaultAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+// Helper to get client (either default or custom)
+const getClient = (apiKey?: string) => {
+    if (apiKey && apiKey.trim().length > 0) {
+        return new GoogleGenAI({ apiKey });
+    }
+    return defaultAi;
+};
 
 /**
  * Generates the visual background using Gemini 3 Pro Image Preview.
  * Configured for 2K resolution (2048px).
  * Reverted to this model due to permission issues with Imagen 4.0.
  */
-export const generateBackgroundImage = async (prompt: string, aspectRatio: AspectRatio, orientation: 'landscape' | 'portrait' = 'landscape'): Promise<string> => {
+export const generateBackgroundImage = async (
+    prompt: string, 
+    aspectRatio: AspectRatio, 
+    orientation: 'landscape' | 'portrait' = 'landscape',
+    apiKey?: string
+): Promise<string> => {
   try {
+    const ai = getClient(apiKey);
+
     // Determine the API-compatible aspect ratio string
     // API supports: "1:1", "3:4", "4:3", "9:16", "16:9"
     // We map our app's "Ratio + Orientation" state to these explicit API values.
@@ -69,8 +85,10 @@ export const generateBackgroundImage = async (prompt: string, aspectRatio: Aspec
 /**
  * Edits the existing image based on a prompt using Gemini 2.5 Flash Image.
  */
-export const editImage = async (imageBase64: string, prompt: string): Promise<string> => {
+export const editImage = async (imageBase64: string, prompt: string, apiKey?: string): Promise<string> => {
   try {
+    const ai = getClient(apiKey);
+    
     // Extract pure base64 and mime type from Data URL
     const matches = imageBase64.match(/^data:(.+);base64,(.+)$/);
     if (!matches || matches.length !== 3) {

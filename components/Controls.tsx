@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useMemo } from 'react';
 import { DesignState, FontFamily, AspectRatio, TextLayer } from '../types';
 import { 
@@ -275,6 +274,7 @@ const Controls: React.FC<ControlsProps> = ({
         shadowOffset: 20,
         shadowAngle: 45,
         shadowOpacity: 1.0,
+        shadowGrow: 0,
         isBold: false,
         isItalic: false,
         isUppercase: false,
@@ -619,7 +619,7 @@ const Controls: React.FC<ControlsProps> = ({
                         <span className="block text-sm text-white" style={{ fontFamily: activeLayer.fontFamily }}>
                             {activeLayer.fontFamily}
                         </span>
-                        {design.selectedLayerIds.length > 1 && <span className="text-[10px] text-neutral-500">Ap. to all selected</span>}
+                        {design.selectedLayerIds.length > 1 && <span className="text-[10px] text-neutral-500">Apply to all selected</span>}
                     </div>
                 </div>
                 <BookType size={16} className="text-neutral-600 group-hover:text-white transition-colors" />

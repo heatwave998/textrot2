@@ -150,6 +150,7 @@ export interface TextLayer {
   shadowOffset: number; // 0-100
   shadowAngle: number; // 0-360
   shadowOpacity: number; // 0-1
+  shadowGrow: number; // 0-50 (Spread/Choke)
 
   // Typography Modifiers
   isBold: boolean;
@@ -190,4 +191,5 @@ export interface DesignState {
 
 export interface AppSettings {
   enableZoom: boolean;
+  googleApiKey: string;
 }

@@ -1,5 +1,6 @@
-import React from 'react';
-import { X, MousePointer2 } from 'lucide-react';
+
+import React, { useState } from 'react';
+import { X, MousePointer2, Settings, Cloud, Key } from 'lucide-react';
 import { AppSettings } from '../types';
 
 interface SettingsModalProps {
@@ -15,10 +16,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   settings, 
   onSettingsChange 
 }) => {
+  const [activeTab, setActiveTab] = useState<'general' | 'services'>('general');
+
   if (!isOpen) return null;
 
   const toggleZoom = () => {
     onSettingsChange({ ...settings, enableZoom: !settings.enableZoom });
+  };
+
+  const updateApiKey = (key: string) => {
+    onSettingsChange({ ...settings, googleApiKey: key });
   };
 
   return (
@@ -43,35 +50,83 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
           </button>
         </div>
 
+        {/* Tab Bar */}
+        <div className="flex border-b border-neutral-800 bg-neutral-900/50">
+            <button
+                onClick={() => setActiveTab('general')}
+                className={`flex-1 py-3 text-xs font-medium flex items-center justify-center gap-2 transition-colors ${
+                    activeTab === 'general' 
+                    ? 'text-white bg-neutral-800 border-b-2 border-pink-500' 
+                    : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800/50'
+                }`}
+            >
+                <Settings size={14} /> General
+            </button>
+            <button
+                onClick={() => setActiveTab('services')}
+                className={`flex-1 py-3 text-xs font-medium flex items-center justify-center gap-2 transition-colors ${
+                    activeTab === 'services' 
+                    ? 'text-white bg-neutral-800 border-b-2 border-pink-500' 
+                    : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800/50'
+                }`}
+            >
+                <Cloud size={14} /> Services
+            </button>
+        </div>
+
         {/* Body */}
-        <div className="p-6 space-y-6">
+        <div className="p-6 h-64 overflow-y-auto custom-scrollbar">
           
-          {/* Option: Mouse Wheel Zoom */}
-          <div className="flex items-center justify-between group">
-            <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-[3px] ${settings.enableZoom ? 'bg-pink-500/10 text-pink-500' : 'bg-neutral-800 text-neutral-500'}`}>
-                    <MousePointer2 size={20} />
-                </div>
-                <div>
-                    <h3 className="text-sm font-medium text-white">Canvas Zoom</h3>
-                    <p className="text-xs text-neutral-500">Use scroll wheel to zoom in/out</p>
+          {activeTab === 'general' && (
+            <div className="space-y-6 animate-in slide-in-from-left-2 fade-in duration-200">
+                {/* Option: Mouse Wheel Zoom */}
+                <div className="flex items-center justify-between group">
+                    <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-[3px] ${settings.enableZoom ? 'bg-pink-500/10 text-pink-500' : 'bg-neutral-800 text-neutral-500'}`}>
+                            <MousePointer2 size={20} />
+                        </div>
+                        <div>
+                            <h3 className="text-sm font-medium text-white">Canvas Zoom</h3>
+                            <p className="text-xs text-neutral-500">Use scroll wheel to zoom in/out</p>
+                        </div>
+                    </div>
+                    
+                    {/* Toggle Switch */}
+                    <button 
+                        onClick={toggleZoom}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none ${settings.enableZoom ? 'bg-pink-500' : 'bg-neutral-700'}`}
+                    >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${settings.enableZoom ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
                 </div>
             </div>
-            
-            {/* Toggle Switch */}
-            <button 
-                onClick={toggleZoom}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none ${settings.enableZoom ? 'bg-pink-500' : 'bg-neutral-700'}`}
-            >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${settings.enableZoom ? 'translate-x-6' : 'translate-x-1'}`} />
-            </button>
-          </div>
+          )}
+
+          {activeTab === 'services' && (
+            <div className="space-y-6 animate-in slide-in-from-right-2 fade-in duration-200">
+                <div className="space-y-2">
+                    <label className="text-xs font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-2">
+                        <Key size={14} /> Gemini API Key
+                    </label>
+                    <input 
+                        type="password"
+                        value={settings.googleApiKey}
+                        onChange={(e) => updateApiKey(e.target.value)}
+                        placeholder="Enter your API Key..."
+                        className="w-full bg-neutral-950 border border-neutral-800 rounded-[3px] p-2.5 text-sm text-white focus:outline-none focus:border-pink-500 transition-colors placeholder:text-neutral-700 font-mono"
+                    />
+                    <p className="text-[10px] text-neutral-500 leading-relaxed">
+                        Leave blank to use the default system key. Providing your own key allows for personal quota usage.
+                    </p>
+                </div>
+            </div>
+          )}
 
         </div>
         
         {/* Footer */}
         <div className="p-4 bg-neutral-950 border-t border-neutral-800 text-center">
-            <p className="text-[10px] text-neutral-600">///textrot studio v1.0</p>
+            <p className="text-[10px] text-neutral-600">///textrot studio v1.1</p>
         </div>
       </div>
     </div>

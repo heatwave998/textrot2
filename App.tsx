@@ -36,6 +36,7 @@ const createLayer = (id: string, text: string = 'EDIT ME'): TextLayer => ({
   shadowOffset: 20,
   shadowAngle: 45,
   shadowOpacity: 1.0,
+  shadowGrow: 0,
   
   isBold: false,
   isItalic: false,
@@ -73,7 +74,8 @@ const DEFAULT_DESIGN: DesignState = {
 };
 
 const DEFAULT_SETTINGS: AppSettings = {
-  enableZoom: true
+  enableZoom: true,
+  googleApiKey: ''
 };
 
 interface ImageHistoryItem {
@@ -158,7 +160,7 @@ export default function App() {
     setIsGenerating(true);
 
     try {
-      const imagePromise = generateBackgroundImage(design.prompt, design.aspectRatio, design.orientation);
+      const imagePromise = generateBackgroundImage(design.prompt, design.aspectRatio, design.orientation, settings.googleApiKey);
       const imgData = await imagePromise;
 
       addToHistory(imgData, design.aspectRatio, design.orientation);
@@ -207,7 +209,7 @@ export default function App() {
       
       setIsGenerating(true);
       try {
-          const editedImgData = await editImage(imageSrc, design.prompt);
+          const editedImgData = await editImage(imageSrc, design.prompt, settings.googleApiKey);
           addToHistory(editedImgData, design.aspectRatio, design.orientation);
       } catch (error) {
           alert("Failed to edit image. Ensure your API key is valid.");
@@ -360,12 +362,6 @@ export default function App() {
       setDesign(prev => ({ ...prev, ...updates }));
   };
 
-  // Setup Keyboard Shortcuts (Empty for now as requested)
-  // Example usage commented out:
-  // const shortcuts: KeyboardShortcut[] = [
-  //   { id: 'undo', combo: { key: 'z', ctrl: true }, action: handleUndo },
-  //   { id: 'redo', combo: { key: 'y', ctrl: true }, action: handleRedo }
-  // ];
   const shortcuts: KeyboardShortcut[] = [];
   useKeyboard(shortcuts);
 
