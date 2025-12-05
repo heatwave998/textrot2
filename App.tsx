@@ -442,7 +442,18 @@ export default function App() {
       setDesign(prev => ({ ...prev, ...updates }));
   };
 
-  const shortcuts: KeyboardShortcut[] = [];
+  const shortcuts: KeyboardShortcut[] = [
+    {
+        id: 'undo',
+        combo: { key: 'z', ctrl: true }, // ctrl: true matches both Ctrl and Meta (Cmd) in useKeyboard
+        action: handleUndo
+    },
+    {
+        id: 'redo',
+        combo: { key: 'z', ctrl: true, shift: true },
+        action: handleRedo
+    }
+  ];
   useKeyboard(shortcuts);
 
   return (

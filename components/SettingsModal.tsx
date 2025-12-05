@@ -1,6 +1,7 @@
 
+
 import React, { useState, useRef, useEffect } from 'react';
-import { X, MousePointer2, Settings, Cloud, Key, Check, Loader2 } from 'lucide-react';
+import { X, MousePointer2, Settings, Cloud, Key, Check, Loader2, Terminal } from 'lucide-react';
 import { AppSettings } from '../types';
 
 interface SettingsModalProps {
@@ -22,6 +23,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [isValidating, setIsValidating] = useState(false);
   const [validationStatus, setValidationStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [validationMsg, setValidationMsg] = useState('');
+  
+  // Debug State
+  const [isDebugMode, setIsDebugMode] = useState(false);
+  const [debugLog, setDebugLog] = useState('');
   
   // Input State
   const [isInputFocused, setIsInputFocused] = useState(false);
@@ -51,32 +56,56 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
     setIsValidating(true);
     setValidationStatus('idle');
     setValidationMsg('');
+    setDebugLog('');
+
+    const logs: string[] = [];
+    const addLog = (msg: string) => logs.push(msg);
+    const timestamp = new Date().toISOString();
 
     try {
-        const response = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${settings.googleApiKey}`,
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    contents: [{ parts: [{ text: "ping" }] }],
-                    generationConfig: { maxOutputTokens: 1 }
-                })
-            }
-        );
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${settings.googleApiKey}`;
+        addLog(`[${timestamp}] Initiating Validation Request...`);
+        addLog(`POST ${endpoint.replace(settings.googleApiKey, 'API_KEY_HIDDEN')}`);
+        
+        const payload = { 
+            contents: [{ parts: [{ text: "ping" }] }],
+            generationConfig: { maxOutputTokens: 1 }
+        };
+        addLog(`Payload: ${JSON.stringify(payload, null, 2)}`);
+
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        addLog(`Status: ${response.status} ${response.statusText}`);
+        
+        const responseText = await response.text();
+        let responseData;
+        try {
+            responseData = JSON.parse(responseText);
+            addLog(`Response Body: ${JSON.stringify(responseData, null, 2)}`);
+        } catch (e) {
+            addLog(`Response Body (Raw): ${responseText}`);
+        }
 
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error?.message || `API returned ${response.status}`);
+            const errorMsg = responseData?.error?.message || `API returned ${response.status}`;
+            throw new Error(errorMsg);
         }
 
         setValidationStatus('success');
+        setIsInputFocused(false); // Obfuscate on success
+        addLog(`Validation Successful.`);
     } catch (error: any) {
         console.error("API Validation Failed:", error);
+        addLog(`Error: ${error.message}`);
         setValidationStatus('error');
         setValidationMsg(error.message || "Validation failed. Check console for details.");
     } finally {
         setIsValidating(false);
+        setDebugLog(logs.join('\n\n'));
     }
   };
 
@@ -133,7 +162,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* Body */}
-        <div className="p-6 h-64 overflow-y-auto custom-scrollbar">
+        <div className="p-6 h-[22rem] overflow-y-auto custom-scrollbar">
           
           {activeTab === 'general' && (
             <div className="space-y-6 animate-in slide-in-from-left-2 fade-in duration-200">
@@ -174,7 +203,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                                 type="text"
                                 value={settings.googleApiKey}
                                 onChange={(e) => updateApiKey(e.target.value)}
-                                onBlur={() => setIsInputFocused(false)}
+                                onFocus={() => setIsInputFocused(true)}
                                 placeholder="Enter your API Key..."
                                 className="w-full bg-neutral-950 border border-neutral-800 rounded-[3px] p-2.5 text-sm text-white focus:outline-none focus:border-pink-500 transition-colors placeholder:text-neutral-700 font-mono"
                             />
@@ -188,31 +217,58 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                         )}
                     </div>
                     
-                    <div className="flex items-center gap-3 mt-2">
-                        <button
-                            onClick={handleValidateKey}
-                            disabled={!settings.googleApiKey || isValidating}
-                            className={`px-3 py-1.5 rounded-[3px] text-[10px] font-bold uppercase tracking-wide border transition-all ${
-                                !settings.googleApiKey 
-                                ? 'bg-neutral-900 border-neutral-800 text-neutral-600 cursor-not-allowed' 
-                                : 'bg-neutral-800 border-neutral-700 text-neutral-300 hover:bg-neutral-700 hover:text-white'
-                            }`}
-                        >
-                            {isValidating ? 'Validating...' : 'Check API Key'}
-                        </button>
-                        
-                        {isValidating && <Loader2 size={16} className="text-neutral-500 animate-spin" />}
-                        {!isValidating && validationStatus === 'success' && <Check size={16} className="text-green-500" />}
-                        {!isValidating && validationStatus === 'error' && <X size={16} className="text-red-500" />}
+                    <div className="flex flex-col gap-3 mt-2">
+                        <div className="flex items-center gap-3">
+                            <button
+                                onClick={handleValidateKey}
+                                disabled={!settings.googleApiKey || isValidating}
+                                className={`px-3 py-1.5 rounded-[3px] text-[10px] font-bold uppercase tracking-wide border transition-all ${
+                                    !settings.googleApiKey 
+                                    ? 'bg-neutral-900 border-neutral-800 text-neutral-600 cursor-not-allowed' 
+                                    : 'bg-neutral-800 border-neutral-700 text-neutral-300 hover:bg-neutral-700 hover:text-white'
+                                }`}
+                            >
+                                {isValidating ? 'Validating...' : 'Check API Key'}
+                            </button>
+                            
+                            {isValidating && <Loader2 size={16} className="text-neutral-500 animate-spin" />}
+                            {!isValidating && validationStatus === 'success' && <Check size={16} className="text-green-500" />}
+                            {!isValidating && validationStatus === 'error' && <X size={16} className="text-red-500" />}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            <button 
+                                onClick={() => setIsDebugMode(!isDebugMode)}
+                                className={`w-3 h-3 rounded-[2px] border flex items-center justify-center transition-colors ${isDebugMode ? 'bg-pink-500 border-pink-500' : 'border-neutral-700 bg-neutral-900'}`}
+                            >
+                                {isDebugMode && <Check size={10} className="text-white" />}
+                            </button>
+                            <label onClick={() => setIsDebugMode(!isDebugMode)} className="text-[10px] text-neutral-500 cursor-pointer select-none hover:text-neutral-300 transition-colors flex items-center gap-1">
+                                <Terminal size={10} /> Debug Mode
+                            </label>
+                        </div>
                     </div>
 
-                    {validationStatus === 'error' && (
+                    {validationStatus === 'error' && !isDebugMode && (
                         <p className="text-[10px] text-red-500 mt-1 break-words leading-tight">{validationMsg}</p>
                     )}
 
-                    <p className="text-[10px] text-neutral-500 leading-relaxed mt-2 pt-2 border-t border-neutral-800/50">
-                        Leave blank to use the default system key. Providing your own key allows for personal quota usage.
-                    </p>
+                    {isDebugMode && (
+                        <div className="mt-2 relative">
+                             <div className="absolute top-0 right-0 p-1">
+                                <span className="text-[9px] text-neutral-600 bg-neutral-900 border border-neutral-800 px-1 rounded">LOG</span>
+                             </div>
+                             <pre className="w-full h-32 bg-black border border-neutral-800 rounded-[3px] p-2 text-[9px] font-mono text-green-500/90 overflow-y-auto whitespace-pre-wrap leading-relaxed shadow-inner">
+                                {debugLog || "// Waiting for validation request..."}
+                             </pre>
+                        </div>
+                    )}
+
+                    {!isDebugMode && (
+                        <p className="text-[10px] text-neutral-500 leading-relaxed mt-2 pt-2 border-t border-neutral-800/50">
+                            Leave blank to use the default system key. Providing your own key allows for personal quota usage.
+                        </p>
+                    )}
                 </div>
             </div>
           )}
