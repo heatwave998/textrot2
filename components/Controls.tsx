@@ -493,9 +493,9 @@ const Controls: React.FC<ControlsProps> = ({
                      <select
                         value={settings.imageModel}
                         onChange={handleModelChange}
-                        className="w-full bg-neutral-950 border border-neutral-800 rounded-[3px] py-1.5 px-2 text-xs text-white focus:outline-none focus:border-pink-500 transition-colors appearance-none cursor-pointer text-right pr-6"
+                        className="w-full bg-neutral-950 border border-neutral-800 rounded-[3px] py-1.5 px-2 text-xs text-white focus:outline-none focus:border-pink-500 transition-colors appearance-none cursor-pointer text-left pr-6"
                     >
-                        <option value="gemini-2.5-flash-image">Nana 🍌</option>
+                        <option value="gemini-2.5-flash-image">Nano 🍌</option>
                         <option value="gemini-3-pro-image-preview">Nano 🍌 Pro</option>
                     </select>
                     <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none" />
@@ -552,7 +552,7 @@ const Controls: React.FC<ControlsProps> = ({
                                 {!isEditDisabled && (
                                     <>
                                         {/* Rainbow Border Gradient */}
-                                        <div className="absolute inset-0 bg-gradient-to-r from-red-500 via-yellow-500 via-green-500 via-blue-500 to-purple-500 rounded-[3px] opacity-100"></div>
+                                        <div className="absolute inset-0 bg-gradient-to-r from-red-500 via-yellow-500 via-green-300 via-blue-500 to-purple-500 rounded-[3px] opacity-100"></div>
                                         {/* Rainbow Glow */}
                                         <div className="absolute inset-0 bg-gradient-to-r from-red-500 via-yellow-500 via-green-500 via-blue-500 to-purple-500 rounded-[3px] blur-[4px] opacity-30 group-hover:opacity-70 transition-opacity duration-300"></div>
                                     </>
