@@ -1,9 +1,7 @@
 
-
-
-import React, { useState } from 'react';
-import { X, MousePointer2, Settings, Cloud, Key, Cpu, ChevronDown } from 'lucide-react';
-import { AppSettings, GenModel } from '../types';
+import React, { useState, useRef, useEffect } from 'react';
+import { X, MousePointer2, Settings, Cloud, Key, Check, Loader2 } from 'lucide-react';
+import { AppSettings } from '../types';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -19,6 +17,21 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   onSettingsChange 
 }) => {
   const [activeTab, setActiveTab] = useState<'general' | 'services'>('general');
+  
+  // Validation State
+  const [isValidating, setIsValidating] = useState(false);
+  const [validationStatus, setValidationStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [validationMsg, setValidationMsg] = useState('');
+  
+  // Input State
+  const [isInputFocused, setIsInputFocused] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isInputFocused && inputRef.current) {
+        inputRef.current.focus();
+    }
+  }, [isInputFocused]);
 
   if (!isOpen) return null;
 
@@ -28,6 +41,49 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const updateApiKey = (key: string) => {
     onSettingsChange({ ...settings, googleApiKey: key });
+    setValidationStatus('idle');
+    setValidationMsg('');
+  };
+
+  const handleValidateKey = async () => {
+    if (!settings.googleApiKey.trim()) return;
+
+    setIsValidating(true);
+    setValidationStatus('idle');
+    setValidationMsg('');
+
+    try {
+        const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${settings.googleApiKey}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    contents: [{ parts: [{ text: "ping" }] }],
+                    generationConfig: { maxOutputTokens: 1 }
+                })
+            }
+        );
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error?.message || `API returned ${response.status}`);
+        }
+
+        setValidationStatus('success');
+    } catch (error: any) {
+        console.error("API Validation Failed:", error);
+        setValidationStatus('error');
+        setValidationMsg(error.message || "Validation failed. Check console for details.");
+    } finally {
+        setIsValidating(false);
+    }
+  };
+
+  const getMaskedKey = (key: string) => {
+      if (!key) return '';
+      if (key.length <= 8) return '••••••••';
+      return `${key.slice(0, 3)}••••••••••••••••••••••••${key.slice(-3)}`;
   };
 
   return (
@@ -72,7 +128,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800/50'
                 }`}
             >
-                <Cloud size={14} /> Services
+                <Cloud size={14} /> AI Services
             </button>
         </div>
 
@@ -110,35 +166,52 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     <label className="text-xs font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-2">
                         <Key size={14} /> Gemini API Key
                     </label>
-                    <input 
-                        type="password"
-                        value={settings.googleApiKey}
-                        onChange={(e) => updateApiKey(e.target.value)}
-                        placeholder="Enter your API Key..."
-                        className="w-full bg-neutral-950 border border-neutral-800 rounded-[3px] p-2.5 text-sm text-white focus:outline-none focus:border-pink-500 transition-colors placeholder:text-neutral-700 font-mono"
-                    />
-                    <p className="text-[10px] text-neutral-500 leading-relaxed">
-                        Leave blank to use the default system key. Providing your own key allows for personal quota usage.
-                    </p>
-                </div>
-
-                <div className="space-y-2 pt-2 border-t border-neutral-800">
-                    <label className="text-xs font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-2">
-                        <Cpu size={14} /> Image Generation Model
-                    </label>
+                    
                     <div className="relative">
-                        <select
-                            value={settings.imageModel}
-                            onChange={(e) => onSettingsChange({ ...settings, imageModel: e.target.value as GenModel })}
-                            className="w-full bg-neutral-950 border border-neutral-800 rounded-[3px] p-2.5 text-sm text-white focus:outline-none focus:border-pink-500 transition-colors appearance-none cursor-pointer"
-                        >
-                            <option value="gemini-3-pro-image-preview">Nano Banana Pro (Gemini 3 Pro)</option>
-                            <option value="gemini-2.5-flash-image">Nano Banana (Gemini 2.5 Flash)</option>
-                        </select>
-                        <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none" />
+                        {isInputFocused || !settings.googleApiKey ? (
+                            <input 
+                                ref={inputRef}
+                                type="text"
+                                value={settings.googleApiKey}
+                                onChange={(e) => updateApiKey(e.target.value)}
+                                onBlur={() => setIsInputFocused(false)}
+                                placeholder="Enter your API Key..."
+                                className="w-full bg-neutral-950 border border-neutral-800 rounded-[3px] p-2.5 text-sm text-white focus:outline-none focus:border-pink-500 transition-colors placeholder:text-neutral-700 font-mono"
+                            />
+                        ) : (
+                            <div 
+                                onClick={() => setIsInputFocused(true)}
+                                className="w-full bg-neutral-950 border border-neutral-800 rounded-[3px] p-2.5 text-sm text-neutral-300 font-mono cursor-text hover:border-neutral-700 transition-colors select-none"
+                            >
+                                {getMaskedKey(settings.googleApiKey)}
+                            </div>
+                        )}
                     </div>
-                    <p className="text-[10px] text-neutral-500 leading-relaxed">
-                        Pro offers 4K resolution and higher fidelity. Flash is faster but lower resolution.
+                    
+                    <div className="flex items-center gap-3 mt-2">
+                        <button
+                            onClick={handleValidateKey}
+                            disabled={!settings.googleApiKey || isValidating}
+                            className={`px-3 py-1.5 rounded-[3px] text-[10px] font-bold uppercase tracking-wide border transition-all ${
+                                !settings.googleApiKey 
+                                ? 'bg-neutral-900 border-neutral-800 text-neutral-600 cursor-not-allowed' 
+                                : 'bg-neutral-800 border-neutral-700 text-neutral-300 hover:bg-neutral-700 hover:text-white'
+                            }`}
+                        >
+                            {isValidating ? 'Validating...' : 'Check API Key'}
+                        </button>
+                        
+                        {isValidating && <Loader2 size={16} className="text-neutral-500 animate-spin" />}
+                        {!isValidating && validationStatus === 'success' && <Check size={16} className="text-green-500" />}
+                        {!isValidating && validationStatus === 'error' && <X size={16} className="text-red-500" />}
+                    </div>
+
+                    {validationStatus === 'error' && (
+                        <p className="text-[10px] text-red-500 mt-1 break-words leading-tight">{validationMsg}</p>
+                    )}
+
+                    <p className="text-[10px] text-neutral-500 leading-relaxed mt-2 pt-2 border-t border-neutral-800/50">
+                        Leave blank to use the default system key. Providing your own key allows for personal quota usage.
                     </p>
                 </div>
             </div>

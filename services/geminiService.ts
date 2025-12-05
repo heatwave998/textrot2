@@ -1,7 +1,7 @@
 
 
 import { GoogleGenAI, Modality } from "@google/genai";
-import { AspectRatio, Orientation, GenModel } from "../types";
+import { AspectRatio, Orientation, GenModel, ImageResolution } from "../types";
 
 // Initialize default client
 const defaultAi = new GoogleGenAI({ apiKey: process.env.API_KEY });
@@ -46,7 +46,8 @@ export const generateBackgroundImage = async (
     aspectRatio: AspectRatio, 
     orientation: 'landscape' | 'portrait' = 'landscape',
     apiKey?: string,
-    model: GenModel = 'gemini-3-pro-image-preview'
+    model: GenModel = 'gemini-3-pro-image-preview',
+    resolution: ImageResolution = '1K'
 ): Promise<string> => {
   try {
     const ai = getClient(apiKey);
@@ -61,7 +62,7 @@ export const generateBackgroundImage = async (
 
     // Only Gemini 3 Pro Image Preview supports 'imageSize'
     if (model === 'gemini-3-pro-image-preview') {
-        config.imageConfig.imageSize = '4K';
+        config.imageConfig.imageSize = resolution;
     }
 
     const response = await ai.models.generateContent({
@@ -100,7 +101,8 @@ export const editImage = async (
     aspectRatio: AspectRatio, 
     orientation: Orientation, 
     apiKey?: string,
-    model: GenModel = 'gemini-3-pro-image-preview'
+    model: GenModel = 'gemini-3-pro-image-preview',
+    resolution: ImageResolution = '1K'
 ): Promise<string> => {
   try {
     const ai = getClient(apiKey);
@@ -123,7 +125,7 @@ export const editImage = async (
 
     // Only Gemini 3 Pro Image Preview supports 'imageSize'
     if (model === 'gemini-3-pro-image-preview') {
-        config.imageConfig.imageSize = '4K';
+        config.imageConfig.imageSize = resolution;
     }
 
     // Use selected model for editing/inpainting capabilities
@@ -138,7 +140,7 @@ export const editImage = async (
             },
           },
           {
-            text: `${prompt}. Maintain high quality and photorealism. Output in high resolution 4K.`,
+            text: `${prompt}. Maintain high quality and photorealism.`,
           },
         ],
       },

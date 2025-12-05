@@ -1,5 +1,7 @@
+
+
 import React, { useState, useCallback, useMemo } from 'react';
-import { DesignState, FontFamily, AspectRatio, TextLayer } from '../types';
+import { DesignState, FontFamily, AspectRatio, TextLayer, AppSettings, GenModel, ImageResolution } from '../types';
 import { 
   Type, Palette, Layers, Download, Sparkles, 
   Bold, Italic, CaseUpper, FlipHorizontal, FlipVertical, 
@@ -21,6 +23,8 @@ import { FONTS } from '../constants';
 interface ControlsProps {
   design: DesignState;
   setDesign: React.Dispatch<React.SetStateAction<DesignState>>;
+  settings: AppSettings;
+  onUpdateSettings: (settings: AppSettings) => void;
   onGenerate: () => void;
   onEdit: () => void;
   onBlank: () => void;
@@ -34,9 +38,11 @@ interface ControlsProps {
   isGenerating: boolean;
   vibeReasoning: string | null;
   hasImage: boolean;
+  onError?: (error: any) => void;
 }
 
 const RATIOS: AspectRatio[] = ['1:1', '4:3', '3:2', '16:9'];
+const RESOLUTIONS: ImageResolution[] = ['1K', '2K', '4K'];
 
 // Nudge Amounts in Percentages
 const NUDGE_SMALL = 0.1;
@@ -46,6 +52,8 @@ const NUDGE_LARGE = 5.0;
 const Controls: React.FC<ControlsProps> = ({ 
   design, 
   setDesign, 
+  settings,
+  onUpdateSettings,
   onGenerate, 
   onEdit,
   onBlank,
@@ -57,7 +65,8 @@ const Controls: React.FC<ControlsProps> = ({
   canUndo,
   canRedo,
   isGenerating,
-  hasImage
+  hasImage,
+  onError
 }) => {
   const [layerToDelete, setLayerToDelete] = useState<string | null>(null);
   const [hoveredControl, setHoveredControl] = useState<string | null>(null);
@@ -168,6 +177,24 @@ const Controls: React.FC<ControlsProps> = ({
     setDesign(prev => ({ ...prev, [key]: value }));
   };
 
+  const handleModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const newModel = e.target.value as GenModel;
+      const isFlash = newModel === 'gemini-2.5-flash-image';
+      
+      onUpdateSettings({
+          ...settings,
+          imageModel: newModel,
+          imageResolution: isFlash ? '1K' : settings.imageResolution
+      });
+  };
+
+  const handleResolutionChange = (res: ImageResolution) => {
+      onUpdateSettings({
+          ...settings,
+          imageResolution: res
+      });
+  };
+
   // Active Layer Updates
   const activeLayer = design.layers.find(l => l.id === design.activeLayerId);
   
@@ -188,11 +215,6 @@ const Controls: React.FC<ControlsProps> = ({
 
   const updatePosition = (axis: 'x' | 'y', value: number) => {
       if (!activeLayer) return;
-      // When dragging sliders, we set the absolute value for the active layer
-      // For other selected layers, we could apply a delta, but for property sliders, 
-      // strict equality (snapping them together) is often preferred or we need complex delta logic.
-      // Simplest UX for a "Position Slider" in multi-select is usually "Align all to this value" or disable it.
-      // Let's go with "Align all to this value" for now as it's consistent with color/font picking.
       updateLayer('overlayPosition', { ...activeLayer.overlayPosition, [axis]: value });
   };
 
@@ -227,7 +249,6 @@ const Controls: React.FC<ControlsProps> = ({
                    const min = Math.min(startIdx, endIdx);
                    const max = Math.max(startIdx, endIdx);
                    const range = allIds.slice(min, max + 1);
-                   // Union with existing selection or replace? Standard is replace usually, but let's just ensure range is selected.
                    const set = new Set([...newSelected, ...range]);
                    newSelected = Array.from(set);
                    newActive = id;
@@ -312,17 +333,9 @@ const Controls: React.FC<ControlsProps> = ({
       if (!layerToDelete) return;
 
       setDesign(prev => {
-          // If deleting part of selection, remove all selected? Or just the target?
-          // If clicked trash on a layer that is part of selection, delete all selected?
-          // Simplest: Delete just the target, but remove from selection lists.
           const isSelected = prev.selectedLayerIds.includes(layerToDelete);
           
           let idsToDelete = [layerToDelete];
-          if (isSelected && prev.selectedLayerIds.length > 1) {
-              // If we delete one item of a multi-selection, often user expects that item gone.
-              // If we wanted to delete ALL selected, we'd need a bulk delete action.
-              // We'll stick to single delete for the button click.
-          }
 
           const newLayers = prev.layers.filter(l => !idsToDelete.includes(l.id));
           const newSelected = prev.selectedLayerIds.filter(id => !idsToDelete.includes(id));
@@ -389,6 +402,8 @@ const Controls: React.FC<ControlsProps> = ({
       return ratio;
   };
 
+  const isFlash = settings.imageModel === 'gemini-2.5-flash-image';
+
   return (
     <div className="h-full flex flex-col bg-neutral-900 border-l border-neutral-800 overflow-hidden">
       
@@ -445,6 +460,42 @@ const Controls: React.FC<ControlsProps> = ({
               value={design.prompt}
               onChange={(e) => updateGlobal('prompt', e.target.value)}
             />
+
+            {/* Model & Resolution Controls */}
+            <div className="flex items-center justify-between">
+                {/* Resolution Toggles */}
+                <div className="flex bg-neutral-950 p-0.5 rounded-[3px] border border-neutral-800">
+                    {RESOLUTIONS.map((res) => (
+                        <button
+                            key={res}
+                            onClick={() => handleResolutionChange(res)}
+                            disabled={isFlash && res !== '1K'}
+                            className={`px-3 py-1.5 rounded-[2px] text-[10px] font-bold transition-all ${
+                                settings.imageResolution === res 
+                                ? 'bg-neutral-800 text-white shadow-sm' 
+                                : isFlash && res !== '1K' 
+                                    ? 'text-neutral-800 cursor-not-allowed' 
+                                    : 'text-neutral-500 hover:text-neutral-300'
+                            }`}
+                        >
+                            {res}
+                        </button>
+                    ))}
+                </div>
+
+                {/* Model Dropdown */}
+                <div className="relative min-w-[120px]">
+                     <select
+                        value={settings.imageModel}
+                        onChange={handleModelChange}
+                        className="w-full bg-neutral-950 border border-neutral-800 rounded-[3px] py-1.5 px-2 text-xs text-white focus:outline-none focus:border-pink-500 transition-colors appearance-none cursor-pointer text-right pr-6"
+                    >
+                        <option value="gemini-2.5-flash-image">Nana 🍌</option>
+                        <option value="gemini-3-pro-image-preview">Nano 🍌 Pro</option>
+                    </select>
+                    <ChevronDown size={12} className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none" />
+                </div>
+            </div>
             
             <div className="space-y-2">
                 <div className="flex justify-between items-center">
@@ -818,28 +869,31 @@ const Controls: React.FC<ControlsProps> = ({
             isOpen={panelState.blending}
             onToggle={() => togglePanel('blending')}
           >
-            <select 
-              className="w-full bg-neutral-950 border border-neutral-800 rounded-[3px] p-2 text-sm outline-none"
-              value={activeLayer.blendMode}
-              onChange={(e) => updateLayer('blendMode', e.target.value)}
-            >
-              <option value="normal">Normal</option>
-              <option value="multiply">Multiply (Darken)</option>
-              <option value="screen">Screen (Lighten)</option>
-              <option value="overlay">Overlay (Contrast)</option>
-              <option value="darken">Darken</option>
-              <option value="lighten">Lighten</option>
-              <option value="color-dodge">Color Dodge</option>
-              <option value="color-burn">Color Burn</option>
-              <option value="hard-light">Hard Light</option>
-              <option value="soft-light">Soft Light</option>
-              <option value="difference">Difference</option>
-              <option value="exclusion">Exclusion</option>
-              <option value="hue">Hue</option>
-              <option value="saturation">Saturation</option>
-              <option value="color">Color</option>
-              <option value="luminosity">Luminosity</option>
-            </select>
+            <div className="relative w-full">
+              <select 
+                className="w-full bg-neutral-950 border border-neutral-800 rounded-[3px] py-2 px-2 text-xs text-white focus:outline-none focus:border-pink-500 transition-colors appearance-none cursor-pointer"
+                value={activeLayer.blendMode}
+                onChange={(e) => updateLayer('blendMode', e.target.value)}
+              >
+                <option value="normal">Normal</option>
+                <option value="multiply">Multiply (Darken)</option>
+                <option value="screen">Screen (Lighten)</option>
+                <option value="overlay">Overlay (Contrast)</option>
+                <option value="darken">Darken</option>
+                <option value="lighten">Lighten</option>
+                <option value="color-dodge">Color Dodge</option>
+                <option value="color-burn">Color Burn</option>
+                <option value="hard-light">Hard Light</option>
+                <option value="soft-light">Soft Light</option>
+                <option value="difference">Difference</option>
+                <option value="exclusion">Exclusion</option>
+                <option value="hue">Hue</option>
+                <option value="saturation">Saturation</option>
+                <option value="color">Color</option>
+                <option value="luminosity">Luminosity</option>
+              </select>
+              <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none" />
+            </div>
             
             <div className="pt-3">
                  <SliderControl label="Opacity" value={activeLayer.opacity * 100} setValue={(v) => updateLayer('opacity', v / 100)} min="0" max="100" step="1" suffix="%" defaultValue={100} />

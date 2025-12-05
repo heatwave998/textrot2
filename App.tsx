@@ -1,4 +1,5 @@
 
+
 import React, { useState, useRef } from 'react';
 import Canvas, { CanvasHandle } from './components/Canvas';
 import Controls from './components/Controls';
@@ -77,7 +78,8 @@ const DEFAULT_DESIGN: DesignState = {
 const DEFAULT_SETTINGS: AppSettings = {
   enableZoom: true,
   googleApiKey: '',
-  imageModel: 'gemini-3-pro-image-preview'
+  imageModel: 'gemini-3-pro-image-preview',
+  imageResolution: '1K'
 };
 
 interface ImageHistoryItem {
@@ -89,18 +91,18 @@ interface ImageHistoryItem {
 export default function App() {
   const [design, setDesign] = useState<DesignState>(DEFAULT_DESIGN);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  
+  // Modal States
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isBlankConfirmOpen, setIsBlankConfirmOpen] = useState(false);
   const [isGenerateConfirmOpen, setIsGenerateConfirmOpen] = useState(false);
   
-  // Error Modal State
-  const [errorState, setErrorState] = useState<{
-    isOpen: boolean;
-    title: string;
-    message: string;
-    ctaLabel?: string;
-    onCta?: () => void;
-  }>({ isOpen: false, title: '', message: '' });
+  // Error State
+  const [errorState, setErrorState] = useState<{ isOpen: boolean; title: string; message: string }>({
+    isOpen: false,
+    title: '',
+    message: ''
+  });
   
   // Image State
   const [imageSrc, setImageSrc] = useState<string | null>(null);
@@ -111,7 +113,38 @@ export default function App() {
   
   const canvasRef = useRef<CanvasHandle>(null);
 
-  // History Management
+  // --- Error Handling ---
+  const handleApiError = (error: any) => {
+    console.error("Application Error:", error);
+    
+    let title = 'An Unexpected Error Occurred';
+    let message = 'Something went wrong. Please try again later.';
+    const errorMsg = error?.message || JSON.stringify(error) || '';
+
+    if (errorMsg.includes('429') || errorMsg.includes('quota') || errorMsg.includes('RESOURCE_EXHAUSTED')) {
+        title = 'Quota Limit Reached';
+        message = 'You have exceeded the request limit for the API. Please wait a moment before trying again, or add your own API Key in Settings for higher limits.';
+    } else if (errorMsg.includes('API_KEY') || errorMsg.includes('403') || errorMsg.includes('PERMISSION_DENIED')) {
+        title = 'Authorization Error';
+        message = 'The API Key provided is invalid or missing permissions. Please check your API Key in Settings.';
+    } else if (errorMsg.includes('503') || errorMsg.includes('Overloaded')) {
+        title = 'Service Overloaded';
+        message = 'The AI models are currently experiencing high traffic. Please try again in a few seconds.';
+    } else if (errorMsg.includes('500') || errorMsg.includes('Internal') || errorMsg.includes('Server Error')) {
+        title = 'Server Error (500)';
+        message = 'The Gemini service encountered an internal error. This is usually temporary. Please try again.';
+    } else if (errorMsg.includes('Safety') || errorMsg.includes('blocked')) {
+        title = 'Content Blocked';
+        message = 'The request was blocked by safety filters. Please modify your prompt and try again.';
+    } else if (errorMsg.includes('Network') || errorMsg.includes('fetch')) {
+        title = 'Network Error';
+        message = 'Could not connect to the AI service. Please check your internet connection.';
+    }
+
+    setErrorState({ isOpen: true, title, message });
+  };
+
+  // --- History Management ---
   const addToHistory = (newImageSrc: string, ratio: AspectRatio, orientation: Orientation) => {
     const newItem: ImageHistoryItem = { src: newImageSrc, aspectRatio: ratio, orientation };
     
@@ -165,50 +198,7 @@ export default function App() {
       }
   };
 
-  // Centralized Error Handler
-  const handleApiError = (error: any) => {
-      console.error("API Error caught:", error);
-      let title = "Error";
-      let message = error instanceof Error ? error.message : "An unexpected error occurred.";
-      let ctaLabel: string | undefined;
-      let onCta: (() => void) | undefined;
-
-      // Check for common API Key / Auth errors
-      if (
-          message.includes("API key") || 
-          message.includes("403") || 
-          message.includes("permission denied") ||
-          message.includes("UNAUTHENTICATED")
-      ) {
-          title = "Authentication Failed";
-          message = "The API key is missing or invalid. Please check your settings and provide a valid Gemini API key.";
-          ctaLabel = "Open Settings";
-          onCta = () => setIsSettingsOpen(true);
-      } 
-      // Check for Quota / Rate Limit errors
-      else if (
-          message.includes("429") || 
-          message.includes("quota") || 
-          message.includes("RESOURCE_EXHAUSTED")
-      ) {
-          title = "Quota Exceeded";
-          message = "You have reached the rate limit or quota for this API key. Please try again later or use a different key.";
-      }
-      // Safety Filters
-      else if (message.includes("SAFETY") || message.includes("blocked")) {
-        title = "Content Blocked";
-        message = "The generation was blocked by safety filters. Please try modifying your prompt.";
-      }
-      
-      setErrorState({
-          isOpen: true,
-          title,
-          message,
-          ctaLabel,
-          onCta
-      });
-  };
-
+  // --- Generation Handlers ---
   const handleGenerate = async () => {
     if (!design.prompt) return;
     
@@ -220,7 +210,8 @@ export default function App() {
           design.aspectRatio, 
           design.orientation, 
           settings.googleApiKey,
-          settings.imageModel
+          settings.imageModel,
+          settings.imageResolution
       );
       const imgData = await imagePromise;
 
@@ -275,7 +266,8 @@ export default function App() {
               design.aspectRatio, 
               design.orientation, 
               settings.googleApiKey,
-              settings.imageModel
+              settings.imageModel,
+              settings.imageResolution
           );
           addToHistory(editedImgData, design.aspectRatio, design.orientation);
       } catch (error) {
@@ -339,7 +331,7 @@ export default function App() {
   const handleImageUpload = (file: File) => {
     const MAX_SIZE = 25 * 1024 * 1024;
     if (file.size > MAX_SIZE) {
-        alert("File is too large. Please upload an image smaller than 25MB.");
+        handleApiError(new Error("File is too large. Please upload an image smaller than 25MB."));
         return;
     }
 
@@ -387,6 +379,7 @@ export default function App() {
         img.src = result;
       }
     };
+    reader.onerror = () => handleApiError(new Error("Failed to read the file."));
     reader.readAsDataURL(file);
   };
 
@@ -408,7 +401,7 @@ export default function App() {
         window.URL.revokeObjectURL(url);
       } catch (e) {
         console.error("Export failed", e);
-        alert("Could not export image.");
+        handleApiError(new Error("Could not export image. The canvas may be tainted or too large."));
       }
     }
   };
@@ -452,6 +445,8 @@ export default function App() {
         <Controls 
           design={design} 
           setDesign={setDesign}
+          settings={settings}
+          onUpdateSettings={setSettings}
           onGenerate={handleGenerateClick}
           onEdit={handleEdit}
           onBlank={handleBlankClick}
@@ -465,6 +460,7 @@ export default function App() {
           isGenerating={isGenerating}
           vibeReasoning={null}
           hasImage={!!imageSrc}
+          onError={handleApiError}
         />
       </div>
 
@@ -494,14 +490,12 @@ export default function App() {
         message="This will replace your current image. Any unsaved changes will be lost."
       />
 
-      {/* API Error Modal */}
-      <ErrorModal 
+      {/* Global Error Modal */}
+      <ErrorModal
         isOpen={errorState.isOpen}
         onClose={() => setErrorState(prev => ({ ...prev, isOpen: false }))}
         title={errorState.title}
         message={errorState.message}
-        ctaLabel={errorState.ctaLabel}
-        onCta={errorState.onCta}
       />
     </div>
   );

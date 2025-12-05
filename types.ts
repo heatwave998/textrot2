@@ -115,6 +115,7 @@ export type AspectRatio = '1:1' | '4:3' | '3:2' | '16:9';
 export type Orientation = 'landscape' | 'portrait';
 export type SpecialEffect = 'none' | 'glitch' | 'gradient' | 'echo';
 export type GenModel = 'gemini-3-pro-image-preview' | 'gemini-2.5-flash-image';
+export type ImageResolution = '1K' | '2K' | '4K';
 
 export interface Point {
   x: number;
@@ -194,4 +195,5 @@ export interface AppSettings {
   enableZoom: boolean;
   googleApiKey: string;
   imageModel: GenModel;
+  imageResolution: ImageResolution;
 }
