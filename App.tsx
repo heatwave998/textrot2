@@ -1,11 +1,11 @@
 
-
 import React, { useState, useRef } from 'react';
 import Canvas, { CanvasHandle } from './components/Canvas';
 import Controls from './components/Controls';
 import SettingsModal from './components/SettingsModal';
 import ConfirmationModal from './components/ConfirmationModal';
 import ErrorModal from './components/ErrorModal';
+import UrlImportModal from './components/UrlImportModal';
 import { DesignState, AppSettings, AspectRatio, Orientation, Point, TextLayer } from './types';
 import { generateBackgroundImage, editImage } from './services/geminiService';
 import { useKeyboard, KeyboardShortcut } from './hooks/useKeyboard';
@@ -96,6 +96,7 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isBlankConfirmOpen, setIsBlankConfirmOpen] = useState(false);
   const [isGenerateConfirmOpen, setIsGenerateConfirmOpen] = useState(false);
+  const [isUrlImportOpen, setIsUrlImportOpen] = useState(false);
   
   // Error State
   const [errorState, setErrorState] = useState<{ isOpen: boolean; title: string; message: string }>({
@@ -383,6 +384,26 @@ export default function App() {
     reader.readAsDataURL(file);
   };
 
+  const handleUrlImport = async (url: string) => {
+     try {
+        const response = await fetch(url, { mode: 'cors' });
+        if (!response.ok) throw new Error("Could not fetch image. Ensure URL is correct and supports CORS.");
+        const blob = await response.blob();
+        
+        let filename = 'imported-image.jpg';
+        try {
+            const urlPath = new URL(url).pathname;
+            const name = urlPath.substring(urlPath.lastIndexOf('/') + 1);
+            if (name) filename = name;
+        } catch {}
+
+        const file = new File([blob], filename, { type: blob.type || 'image/jpeg' });
+        handleImageUpload(file);
+     } catch (err: any) {
+        handleApiError(new Error("Failed to load image from URL. " + (err.message || "")));
+     }
+  };
+
   const handleDownload = async () => {
     if (canvasRef.current) {
       try {
@@ -451,6 +472,7 @@ export default function App() {
           onEdit={handleEdit}
           onBlank={handleBlankClick}
           onUpload={handleUploadTrigger}
+          onUrlImport={() => setIsUrlImportOpen(true)}
           onDownload={handleDownload}
           onOpenSettings={() => setIsSettingsOpen(true)}
           onUndo={handleUndo}
@@ -470,6 +492,13 @@ export default function App() {
         onClose={() => setIsSettingsOpen(false)}
         settings={settings}
         onSettingsChange={setSettings}
+      />
+      
+      {/* URL Import Modal */}
+      <UrlImportModal
+        isOpen={isUrlImportOpen}
+        onClose={() => setIsUrlImportOpen(false)}
+        onImport={handleUrlImport}
       />
 
       {/* Confirmation Modal for Blank Canvas */}

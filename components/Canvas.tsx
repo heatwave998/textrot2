@@ -994,43 +994,13 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
     setIsDraggingFile(false);
   };
 
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault(); 
-    e.stopPropagation(); 
-    setIsDraggingFile(false);
-
-    // 1. Check for dropped files (Local File System)
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-        const file = e.dataTransfer.files[0];
-        if (file.type.startsWith('image/')) {
-            onImageUpload(file);
-        }
-        return;
-    }
-
-    // 2. Check for dropped URLs (Web Images including .webp links)
-    const uri = e.dataTransfer.getData('text/uri-list');
-    const html = e.dataTransfer.getData('text/html');
-    let imageUrl = uri;
-
-    // Extract src from HTML img tag if direct URI is missing
-    if (!imageUrl && html) {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
-        const img = doc.querySelector('img');
-        if (img && img.src) {
-            imageUrl = img.src;
-        }
-    }
-
-    if (imageUrl) {
+  const loadUrlImage = async (imageUrl: string) => {
         try {
             const response = await fetch(imageUrl, { mode: 'cors' });
             if (!response.ok) throw new Error(`Failed to fetch image: ${response.statusText}`);
             
             const blob = await response.blob();
             if (blob.type.startsWith('image/')) {
-                // Infer filename from URL or default
                 let filename = 'dropped-image';
                 try {
                     const urlPath = new URL(imageUrl).pathname;
@@ -1040,7 +1010,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                     // ignore URL parsing errors
                 }
                 
-                // Ensure extension matches blob type if possible, otherwise default
                 if (blob.type === 'image/webp' && !filename.endsWith('.webp')) filename += '.webp';
                 else if (blob.type === 'image/png' && !filename.endsWith('.png')) filename += '.png';
                 else if (blob.type === 'image/jpeg' && !filename.endsWith('.jpg')) filename += '.jpg';
@@ -1051,6 +1020,105 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
         } catch (error) {
             console.error("Error processing dropped image URL:", error);
         }
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault(); 
+    e.stopPropagation(); 
+    setIsDraggingFile(false);
+
+    // 1. Check for dropped files (Local File System)
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        const file = e.dataTransfer.files[0];
+        
+        // SUPPORT: Images
+        if (file.type.startsWith('image/')) {
+            onImageUpload(file);
+            return;
+        }
+
+        // SUPPORT: .webloc (macOS)
+        if (file.name.endsWith('.webloc')) {
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                const content = ev.target?.result as string;
+                // Robust parsing for Apple's Property List format
+                // Matches <key>URL</key> followed immediately by <string>...url...</string>
+                // Handles potential whitespace/newlines between tags
+                const match = content.match(/<key>URL<\/key>\s*<string>(.*?)<\/string>/s);
+                if (match && match[1]) {
+                    loadUrlImage(match[1]);
+                } else {
+                    // Fallback: Try a looser match if the XML structure is non-standard
+                    const looseMatch = content.match(/<string>(https?:\/\/[^<]+)<\/string>/);
+                    if (looseMatch && looseMatch[1]) {
+                        loadUrlImage(looseMatch[1]);
+                    }
+                }
+            };
+            reader.readAsText(file);
+            return;
+        }
+
+        // SUPPORT: .url (Windows)
+        if (file.name.endsWith('.url')) {
+             const reader = new FileReader();
+             reader.onload = (ev) => {
+                 const content = ev.target?.result as string;
+                 // Parse INI style: URL=http...
+                 // Matches URL= followed by the rest of the line
+                 const match = content.match(/URL=(.*)/);
+                 if (match && match[1]) {
+                     loadUrlImage(match[1].trim());
+                 }
+             };
+             reader.readAsText(file);
+             return;
+        }
+
+        return;
+    }
+
+    // 2. Check for dropped URLs (Web Images, Links, Text)
+    // Priority handling for images dragged from other browser windows and text URLs
+    const uriList = e.dataTransfer.getData('text/uri-list');
+    const html = e.dataTransfer.getData('text/html');
+    const plainText = e.dataTransfer.getData('text/plain');
+
+    let imageUrl = '';
+
+    // Priority 1: Try to extract image source from HTML (Best for dragging images from other pages)
+    if (html) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const img = doc.querySelector('img');
+        if (img && img.src) {
+            imageUrl = img.src;
+        }
+    }
+
+    // Priority 2: URI List (Standard URL drag or Link drag)
+    if (!imageUrl && uriList) {
+        const lines = uriList.split(/\r?\n/);
+        for (const line of lines) {
+            if (line.trim() && !line.startsWith('#')) {
+                imageUrl = line.trim();
+                break;
+            }
+        }
+    }
+
+    // Priority 3: Plain Text (Dragging selected URL text)
+    if (!imageUrl && plainText) {
+        const trimmed = plainText.trim();
+        // Simple check if it looks like a web URL
+        if (trimmed.match(/^https?:\/\//i)) {
+            imageUrl = trimmed;
+        }
+    }
+
+    if (imageUrl) {
+        loadUrlImage(imageUrl);
     }
   };
 

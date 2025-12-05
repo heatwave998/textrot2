@@ -1,5 +1,4 @@
 
-
 import React, { useState, useCallback, useMemo } from 'react';
 import { DesignState, FontFamily, AspectRatio, TextLayer, AppSettings, GenModel, ImageResolution } from '../types';
 import { 
@@ -9,7 +8,7 @@ import {
   Monitor, Smartphone, AlignCenterHorizontal, PenTool, Trash2, Route,
   AlignLeft, AlignCenter, AlignRight, Move, Activity,
   Maximize, MoveHorizontal, MoveVertical, Undo2, Redo2, ToggleRight, ToggleLeft, Paintbrush,
-  Plus, Eye, EyeOff, ChevronUp, ChevronDown, Wand2, BoxSelect, BookType
+  Plus, Eye, EyeOff, ChevronUp, ChevronDown, Wand2, BoxSelect, BookType, Link as LinkIcon
 } from 'lucide-react';
 import SliderControl from './SliderControl';
 import EffectsControls from './EffectsControls';
@@ -29,6 +28,7 @@ interface ControlsProps {
   onEdit: () => void;
   onBlank: () => void;
   onUpload: () => void;
+  onUrlImport: () => void;
   onDownload: () => void;
   onOpenSettings: () => void;
   onUndo: () => void;
@@ -58,6 +58,7 @@ const Controls: React.FC<ControlsProps> = ({
   onEdit,
   onBlank,
   onUpload,
+  onUrlImport,
   onDownload,
   onOpenSettings,
   onUndo,
@@ -342,7 +343,7 @@ const Controls: React.FC<ControlsProps> = ({
           
           let newActive = prev.activeLayerId;
           if (idsToDelete.includes(newActive || '')) {
-              newActive = newSelected.length > 0 ? newSelected[newSelected.length - 1] : (newLayers.length > 0 ? newLayers[newLayers.length - 1].id : null);
+              newActive = newSelected.length > 0 ? newSelected[newSelected.length - 1] : (newLayers.length > 0 ? newLayers.length - 1 >= 0 ? newLayers[newLayers.length - 1].id : null : null);
           }
 
           return {
@@ -403,6 +404,10 @@ const Controls: React.FC<ControlsProps> = ({
   };
 
   const isFlash = settings.imageModel === 'gemini-2.5-flash-image';
+  
+  // Computed states for buttons
+  const isGenerateDisabled = isGenerating || !design.prompt.trim();
+  const isEditDisabled = isGenerating || !hasImage || !design.prompt.trim();
 
   return (
     <div className="h-full flex flex-col bg-neutral-900 border-l border-neutral-800 overflow-hidden">
@@ -529,18 +534,61 @@ const Controls: React.FC<ControlsProps> = ({
                 </div>
             </div>
 
-            <div className="flex gap-2">
-                <button 
-                  onClick={onGenerate}
-                  disabled={isGenerating || !design.prompt.trim()}
-                  className={`flex-1 py-3 rounded-[3px] font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg ${isGenerating || !design.prompt.trim() ? 'bg-neutral-800 text-neutral-600 cursor-not-allowed opacity-70' : 'bg-gradient-to-r from-pink-500 to-violet-600 text-white hover:brightness-110 hover:shadow-pink-500/20'}`}
-                >
-                  {isGenerating ? <span className="animate-spin rounded-full h-4 w-4 border-2 border-white/30 border-t-white"></span> : <><Sparkles size={16} /> Generate</>}
-                </button>
-                <button onClick={onEdit} disabled={isGenerating || !hasImage || !design.prompt.trim()} className={`w-12 rounded-[3px] font-bold text-sm flex items-center justify-center transition-all border ${isGenerating || !hasImage || !design.prompt.trim() ? 'bg-neutral-900 text-neutral-700 border-neutral-800 cursor-not-allowed' : 'bg-neutral-800 text-white border-neutral-700 hover:bg-neutral-700'}`}> <Paintbrush size={18} /> </button>
-                <button onClick={onBlank} className="w-12 bg-neutral-800 hover:bg-neutral-700 text-white rounded-[3px] flex items-center justify-center"> <FilePlus size={18} /> </button>
-                <button onClick={onUpload} className="w-12 bg-neutral-800 hover:bg-neutral-700 text-white rounded-[3px] flex items-center justify-center"> <ImagePlus size={18} /> </button>
+            {/* ACTION BUTTONS GRID */}
+            <div className="space-y-2">
+                {/* Row 1: Generate & Edit */}
+                <div className="flex gap-2 h-10">
+                    <button 
+                        onClick={onGenerate}
+                        disabled={isGenerateDisabled}
+                        className={`flex-1 rounded-[3px] font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg ${isGenerateDisabled ? 'bg-neutral-800 text-neutral-600 cursor-not-allowed opacity-70' : 'bg-gradient-to-r from-pink-500 to-violet-600 text-white hover:brightness-110 hover:shadow-pink-500/20'}`}
+                    >
+                        {isGenerating ? <span className="animate-spin rounded-full h-4 w-4 border-2 border-white/30 border-t-white"></span> : <><Sparkles size={16} /> Generate</>}
+                    </button>
+                    
+                    <div className="flex-1">
+                        <Tooltip content="Edit Image (Inpainting)" position="bottom" className="w-full h-full">
+                            <div className={`relative w-full h-full rounded-[3px] group ${isEditDisabled ? '' : 'p-[1px]'}`}>
+                                {!isEditDisabled && (
+                                    <>
+                                        {/* Rainbow Border Gradient */}
+                                        <div className="absolute inset-0 bg-gradient-to-r from-red-500 via-yellow-500 via-green-500 via-blue-500 to-purple-500 rounded-[3px] opacity-100"></div>
+                                        {/* Rainbow Glow */}
+                                        <div className="absolute inset-0 bg-gradient-to-r from-red-500 via-yellow-500 via-green-500 via-blue-500 to-purple-500 rounded-[3px] blur-[4px] opacity-30 group-hover:opacity-70 transition-opacity duration-300"></div>
+                                    </>
+                                )}
+                                <button 
+                                    onClick={onEdit} 
+                                    disabled={isEditDisabled} 
+                                    className={`relative w-full h-full rounded-[2px] font-bold text-sm flex items-center justify-center gap-2 transition-all ${isEditDisabled ? 'bg-neutral-800 text-neutral-600 cursor-not-allowed opacity-70' : 'bg-neutral-900 text-white hover:bg-neutral-800'}`}
+                                > 
+                                    <Paintbrush size={16} /> Edit
+                                </button>
+                            </div>
+                        </Tooltip>
+                    </div>
+                </div>
+
+                {/* Row 2: Utilities */}
+                <div className="flex gap-2 h-9">
+                    <Tooltip content="Reset / Blank Canvas" position="bottom" className="flex-1">
+                        <button onClick={onBlank} className="w-full h-full bg-neutral-800 hover:bg-neutral-700 text-white rounded-[3px] flex items-center justify-center gap-2 text-xs font-medium border border-neutral-700/50 transition-colors"> 
+                            <FilePlus size={14} /> Blank
+                        </button>
+                    </Tooltip>
+                    <Tooltip content="Upload Image" position="bottom" className="flex-1">
+                        <button onClick={onUpload} className="w-full h-full bg-neutral-800 hover:bg-neutral-700 text-white rounded-[3px] flex items-center justify-center gap-2 text-xs font-medium border border-neutral-700/50 transition-colors"> 
+                            <ImagePlus size={14} /> Upload
+                        </button>
+                    </Tooltip>
+                    <Tooltip content="Load from URL" position="bottom" className="flex-1">
+                        <button onClick={onUrlImport} className="w-full h-full bg-neutral-800 hover:bg-neutral-700 text-white rounded-[3px] flex items-center justify-center gap-2 text-xs font-medium border border-neutral-700/50 transition-colors"> 
+                            <LinkIcon size={14} /> Link
+                        </button>
+                    </Tooltip>
+                </div>
             </div>
+
           </div>
         </CollapsibleSection>
 
