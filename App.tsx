@@ -1,7 +1,7 @@
 
 import React, { useState, useRef } from 'react';
 import Canvas, { CanvasHandle } from './components/Canvas';
-import Controls from './components/Controls';
+import Controls, { ControlsHandle } from './components/Controls';
 import SettingsModal from './components/SettingsModal';
 import ConfirmationModal from './components/ConfirmationModal';
 import ErrorModal from './components/ErrorModal';
@@ -86,6 +86,7 @@ interface ImageHistoryItem {
   src: string;
   aspectRatio: AspectRatio;
   orientation: Orientation;
+  layers: TextLayer[];
 }
 
 export default function App() {
@@ -113,6 +114,7 @@ export default function App() {
   const [isGenerating, setIsGenerating] = useState(false);
   
   const canvasRef = useRef<CanvasHandle>(null);
+  const controlsRef = useRef<ControlsHandle>(null);
 
   // --- Error Handling ---
   const handleApiError = (error: any) => {
@@ -146,8 +148,8 @@ export default function App() {
   };
 
   // --- History Management ---
-  const addToHistory = (newImageSrc: string, ratio: AspectRatio, orientation: Orientation) => {
-    const newItem: ImageHistoryItem = { src: newImageSrc, aspectRatio: ratio, orientation };
+  const addToHistory = (newImageSrc: string, ratio: AspectRatio, orientation: Orientation, layers: TextLayer[]) => {
+    const newItem: ImageHistoryItem = { src: newImageSrc, aspectRatio: ratio, orientation, layers };
     
     // Slice if we are in middle of history
     const currentHistory = imageHistory.slice(0, historyIndex + 1);
@@ -172,13 +174,25 @@ export default function App() {
         setHistoryIndex(newIndex);
         setImageSrc(previousState.src);
         
-        setDesign(prev => ({
-            ...prev,
-            aspectRatio: previousState.aspectRatio,
-            orientation: previousState.orientation,
-            // We keep layers as is during image undo, but ensure no path mode is stuck
-            layers: prev.layers.map(l => ({ ...l, pathPoints: [], isPathInputMode: false, isPathMoveMode: false }))
-        }));
+        setDesign(prev => {
+            // Restore layers from history, resetting temporary path states
+            const restoredLayers = previousState.layers.map(l => ({ ...l, pathPoints: [], isPathInputMode: false, isPathMoveMode: false }));
+            
+            // Try to keep active layer ID if it exists in restored layers, else default to last or null
+            let activeId = prev.activeLayerId;
+            if (!restoredLayers.find(l => l.id === activeId)) {
+                activeId = restoredLayers.length > 0 ? restoredLayers[restoredLayers.length - 1].id : null;
+            }
+
+            return {
+                ...prev,
+                aspectRatio: previousState.aspectRatio,
+                orientation: previousState.orientation,
+                layers: restoredLayers,
+                activeLayerId: activeId,
+                selectedLayerIds: activeId ? [activeId] : []
+            };
+        });
     }
   };
 
@@ -190,12 +204,23 @@ export default function App() {
           setHistoryIndex(newIndex);
           setImageSrc(nextState.src);
           
-          setDesign(prev => ({
-            ...prev,
-            aspectRatio: nextState.aspectRatio,
-            orientation: nextState.orientation,
-            layers: prev.layers.map(l => ({ ...l, pathPoints: [], isPathInputMode: false, isPathMoveMode: false }))
-        }));
+          setDesign(prev => {
+            const restoredLayers = nextState.layers.map(l => ({ ...l, pathPoints: [], isPathInputMode: false, isPathMoveMode: false }));
+            
+            let activeId = prev.activeLayerId;
+            if (!restoredLayers.find(l => l.id === activeId)) {
+                activeId = restoredLayers.length > 0 ? restoredLayers[restoredLayers.length - 1].id : null;
+            }
+
+            return {
+                ...prev,
+                aspectRatio: nextState.aspectRatio,
+                orientation: nextState.orientation,
+                layers: restoredLayers,
+                activeLayerId: activeId,
+                selectedLayerIds: activeId ? [activeId] : []
+            };
+        });
       }
   };
 
@@ -215,31 +240,22 @@ export default function App() {
           settings.imageResolution
       );
       const imgData = await imagePromise;
-
-      addToHistory(imgData, design.aspectRatio, design.orientation);
       
-      setDesign(prev => {
-        // Find existing text or reset? Let's reset the active layer text if it's default
-        const activeLayer = prev.layers.find(l => l.id === prev.activeLayerId);
-        const newText = (activeLayer && activeLayer.textOverlay === 'EDIT ME') 
-            ? design.prompt.substring(0, 20).toUpperCase() 
-            : (activeLayer?.textOverlay || 'EDIT ME');
-            
-        // Reset only the active layer transform, or keep composition?
-        // Let's keep composition but reset path modes
-        const newLayers = prev.layers.map(l => ({
-            ...l,
-            textOverlay: l.id === prev.activeLayerId ? newText : l.textOverlay,
-            pathPoints: [],
-            isPathInputMode: false,
-            isPathMoveMode: false,
-        }));
+      const newLayers = design.layers.map(l => ({
+        ...l,
+        textOverlay: l.id === design.activeLayerId && l.textOverlay === 'EDIT ME' ? design.prompt.substring(0, 20).toUpperCase() : l.textOverlay,
+        pathPoints: [],
+        isPathInputMode: false,
+        isPathMoveMode: false,
+      }));
 
-        return {
-            ...prev,
-            layers: newLayers
-        };
-      });
+      // Since generation creates a new scene, we record this state
+      addToHistory(imgData, design.aspectRatio, design.orientation, newLayers);
+      
+      setDesign(prev => ({
+        ...prev,
+        layers: newLayers
+      }));
 
     } catch (error) {
       handleApiError(error);
@@ -270,7 +286,7 @@ export default function App() {
               settings.imageModel,
               settings.imageResolution
           );
-          addToHistory(editedImgData, design.aspectRatio, design.orientation);
+          addToHistory(editedImgData, design.aspectRatio, design.orientation, design.layers);
       } catch (error) {
           handleApiError(error);
       } finally {
@@ -305,12 +321,15 @@ export default function App() {
     if (ctx) ctx.clearRect(0, 0, width, height);
     
     const blankImgData = canvas.toDataURL('image/png');
-    addToHistory(blankImgData, design.aspectRatio, design.orientation);
     
     const newId = crypto.randomUUID();
+    const newLayers = [createLayer(newId, 'BLANK CANVAS')];
+    
+    addToHistory(blankImgData, design.aspectRatio, design.orientation, newLayers);
+    
     setDesign(prev => ({
         ...prev,
-        layers: [createLayer(newId, 'BLANK CANVAS')],
+        layers: newLayers,
         activeLayerId: newId,
         selectedLayerIds: [newId]
     }));
@@ -368,13 +387,16 @@ export default function App() {
                 }
             });
 
-            addToHistory(result, closestRatio, newOrientation);
+            // Initial upload resets layers usually? Or keeps them? Let's keep them but reset paths.
+            const cleanLayers = design.layers.map(l => ({ ...l, pathPoints: [], isPathInputMode: false, isPathMoveMode: false }));
+            
+            addToHistory(result, closestRatio, newOrientation, cleanLayers);
             
             setDesign(prev => ({
                 ...prev,
                 aspectRatio: closestRatio,
                 orientation: newOrientation,
-                layers: prev.layers.map(l => ({ ...l, pathPoints: [], isPathInputMode: false, isPathMoveMode: false }))
+                layers: cleanLayers
             }));
         };
         img.src = result;
@@ -427,6 +449,74 @@ export default function App() {
     }
   };
 
+  const handleStamp = async (idsToStamp: string[]) => {
+      if (!canvasRef.current || !imageSrc) return;
+      
+      // Capture the state of layers exactly as they are now, before async operation
+      // This is crucial: we want to snapshot the "Before" state which includes the vector layers.
+      const layersSnapshot = design.layers;
+
+      try {
+          // Perform the visual stamp (Async)
+          const newImageSrc = await canvasRef.current.stampLayers(idsToStamp);
+          
+          // Calculate layers that remain vector (The filtered result for the "After" state)
+          const remainingLayers = layersSnapshot.filter(l => !idsToStamp.includes(l.id));
+
+          // Manually update history to ensure atomicity.
+          // We assume 'historyIndex' is stable during this operation (user actions blocked or unlikely)
+          setImageHistory(prev => {
+              const historyUpToNow = prev.slice(0, historyIndex + 1);
+
+              // 1. UPDATE CURRENT TIP: Snapshot the vector layers before they disappear.
+              // This fixes the issue where Undo would restore to a state WITHOUT the vector layers.
+              if (historyUpToNow.length > 0) {
+                  const currentTip = historyUpToNow[historyUpToNow.length - 1];
+                  historyUpToNow[historyUpToNow.length - 1] = {
+                      ...currentTip,
+                      layers: layersSnapshot // <--- THIS SAVES THE VECTORS FOR UNDO
+                  };
+              }
+
+              // 2. ADD NEW TIP: The Result of the Stamp
+              const newItem: ImageHistoryItem = {
+                  src: newImageSrc,
+                  aspectRatio: design.aspectRatio,
+                  orientation: design.orientation,
+                  layers: remainingLayers
+              };
+              
+              const newHistory = [...historyUpToNow, newItem];
+              
+              if (newHistory.length > 10) {
+                  newHistory.shift();
+              }
+              
+              // Sync history index
+              setHistoryIndex(newHistory.length - 1);
+              
+              return newHistory;
+          });
+
+          // Update current view
+          setImageSrc(newImageSrc);
+          
+          setDesign(prev => {
+              const newActiveId = remainingLayers.length > 0 ? remainingLayers[remainingLayers.length - 1].id : null;
+              return {
+                  ...prev,
+                  layers: remainingLayers,
+                  activeLayerId: newActiveId,
+                  selectedLayerIds: newActiveId ? [newActiveId] : []
+              };
+          });
+
+      } catch (e) {
+          console.error("Stamp failed", e);
+          handleApiError(new Error("Failed to stamp layers."));
+      }
+  };
+
   const handlePathDrawn = (points: Point[]) => {
     setDesign(prev => ({
         ...prev,
@@ -440,6 +530,10 @@ export default function App() {
 
   const handleDesignUpdate = (updates: Partial<DesignState>) => {
       setDesign(prev => ({ ...prev, ...updates }));
+  };
+  
+  const handleLayerDoubleClick = (layerId: string) => {
+    controlsRef.current?.focusTextInput();
   };
 
   const shortcuts: KeyboardShortcut[] = [
@@ -468,6 +562,7 @@ export default function App() {
             onImageUpload={handleImageUpload}
             onPathDrawn={handlePathDrawn}
             onUpdateDesign={handleDesignUpdate}
+            onLayerDoubleClicked={handleLayerDoubleClick}
             className="shadow-2xl ring-1 ring-white/10"
         />
       </div>
@@ -475,6 +570,7 @@ export default function App() {
       {/* Right: Controls */}
       <div className="w-full md:w-96 h-1/2 md:h-full z-20">
         <Controls 
+          ref={controlsRef}
           design={design} 
           setDesign={setDesign}
           settings={settings}
@@ -488,6 +584,7 @@ export default function App() {
           onOpenSettings={() => setIsSettingsOpen(true)}
           onUndo={handleUndo}
           onRedo={handleRedo}
+          onStamp={handleStamp}
           canUndo={historyIndex > 0}
           canRedo={historyIndex < imageHistory.length - 1}
           isGenerating={isGenerating}

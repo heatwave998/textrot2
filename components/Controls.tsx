@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, forwardRef, useImperativeHandle, useRef } from 'react';
 import { DesignState, FontFamily, AspectRatio, TextLayer, AppSettings, GenModel, ImageResolution } from '../types';
 import { 
   Type, Palette, Layers, Download, Sparkles, 
@@ -8,7 +8,7 @@ import {
   Monitor, Smartphone, AlignCenterHorizontal, PenTool, Trash2, Route,
   AlignLeft, AlignCenter, AlignRight, Move, Activity,
   Maximize, MoveHorizontal, MoveVertical, Undo2, Redo2, ToggleRight, ToggleLeft, Paintbrush,
-  Plus, Eye, EyeOff, ChevronUp, ChevronDown, Wand2, BoxSelect, BookType, Link as LinkIcon
+  Plus, Eye, EyeOff, ChevronUp, ChevronDown, Wand2, BoxSelect, BookType, Link as LinkIcon, Stamp
 } from 'lucide-react';
 import SliderControl from './SliderControl';
 import EffectsControls from './EffectsControls';
@@ -33,12 +33,17 @@ interface ControlsProps {
   onOpenSettings: () => void;
   onUndo: () => void;
   onRedo: () => void;
+  onStamp: (ids: string[]) => void;
   canUndo: boolean;
   canRedo: boolean;
   isGenerating: boolean;
   vibeReasoning: string | null;
   hasImage: boolean;
   onError?: (error: any) => void;
+}
+
+export interface ControlsHandle {
+  focusTextInput: () => void;
 }
 
 const RATIOS: AspectRatio[] = ['1:1', '4:3', '3:2', '16:9'];
@@ -49,7 +54,7 @@ const NUDGE_SMALL = 0.1;
 const NUDGE_MEDIUM = 0.5;
 const NUDGE_LARGE = 5.0;
 
-const Controls: React.FC<ControlsProps> = ({ 
+const Controls = forwardRef<ControlsHandle, ControlsProps>(({ 
   design, 
   setDesign, 
   settings,
@@ -63,15 +68,18 @@ const Controls: React.FC<ControlsProps> = ({
   onOpenSettings,
   onUndo,
   onRedo,
+  onStamp,
   canUndo,
   canRedo,
   isGenerating,
   hasImage,
   onError
-}) => {
+}, ref) => {
   const [layerToDelete, setLayerToDelete] = useState<string | null>(null);
   const [hoveredControl, setHoveredControl] = useState<string | null>(null);
   const [isFontBookOpen, setIsFontBookOpen] = useState(false);
+  
+  const textInputRef = useRef<HTMLTextAreaElement>(null);
 
   // Panel State for Keyboard Shortcuts
   const [panelState, setPanelState] = useState({
@@ -109,6 +117,21 @@ const Controls: React.FC<ControlsProps> = ({
         };
     });
   }, []);
+
+  const focusTextInputInternal = useCallback(() => {
+    setPanelState(prev => ({ ...prev, content: true }));
+    // Small delay to ensure panel expansion render
+    setTimeout(() => {
+        if (textInputRef.current) {
+            textInputRef.current.focus();
+            textInputRef.current.select();
+        }
+    }, 100);
+  }, []);
+
+  useImperativeHandle(ref, () => ({
+    focusTextInput: focusTextInputInternal
+  }), [focusTextInputInternal]);
 
   // Keyboard Shortcuts for Panel Toggles
   // Mapped as requested: Shift+1 for Layers through Shift+8 for Blending
@@ -493,7 +516,7 @@ const Controls: React.FC<ControlsProps> = ({
                      <select
                         value={settings.imageModel}
                         onChange={handleModelChange}
-                        className="w-full bg-neutral-950 border border-neutral-800 rounded-[3px] py-1.5 px-2 text-xs text-white focus:outline-none focus:border-pink-500 transition-colors appearance-none cursor-pointer text-right pr-6"
+                        className="w-full bg-neutral-950 border border-neutral-800 rounded-[3px] py-1.5 px-2 text-xs text-white focus:outline-none focus:border-pink-500 transition-colors appearance-none cursor-pointer text-left pr-6"
                     >
                         <option value="gemini-2.5-flash-image">Nana 🍌</option>
                         <option value="gemini-3-pro-image-preview">Nano 🍌 Pro</option>
@@ -622,6 +645,10 @@ const Controls: React.FC<ControlsProps> = ({
                         <div 
                             key={layer.id}
                             onClick={(e) => handleLayerClick(layer.id, e)}
+                            onDoubleClick={(e) => {
+                                e.stopPropagation();
+                                focusTextInputInternal();
+                            }}
                             className={`flex items-center justify-between p-2 text-xs border-b border-neutral-800 last:border-0 cursor-pointer group ${
                                 isSelected 
                                 ? (isActive ? 'bg-neutral-800 text-white' : 'bg-neutral-800/50 text-neutral-300') 
@@ -670,6 +697,19 @@ const Controls: React.FC<ControlsProps> = ({
                         <div className="p-4 text-center text-neutral-600 text-[10px] italic">No text layers. Click + to add.</div>
                     )}
                 </div>
+
+                {/* Stamp Buttons */}
+                {design.selectedLayerIds.length > 0 && (
+                    <div className="mt-3 flex gap-2 animate-in slide-in-from-top-1 fade-in">
+                        <button 
+                            onClick={() => onStamp(design.selectedLayerIds)}
+                            className="w-full py-2 bg-neutral-800 hover:bg-neutral-700 text-white rounded-[3px] text-xs font-medium flex items-center justify-center gap-2 border border-neutral-700/50 transition-colors"
+                        >
+                            <Stamp size={14} />
+                            {design.selectedLayerIds.length > 1 ? 'Stamp Selected' : 'Stamp Layer'}
+                        </button>
+                    </div>
+                )}
             </div>
         </CollapsibleSection>
 
@@ -689,6 +729,7 @@ const Controls: React.FC<ControlsProps> = ({
                 </div>
             ) : (
                 <textarea 
+                  ref={textInputRef}
                   className="w-full bg-neutral-950 border border-neutral-800 rounded-[3px] p-2 text-sm focus:border-pink-500 outline-none resize-y"
                   rows={2}
                   value={activeLayer.textOverlay}
@@ -981,6 +1022,6 @@ const Controls: React.FC<ControlsProps> = ({
       )}
     </div>
   );
-};
+});
 
 export default Controls;

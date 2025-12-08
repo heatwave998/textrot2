@@ -11,11 +11,13 @@ interface CanvasProps {
   onImageUpload: (file: File) => void;
   onPathDrawn: (points: Point[]) => void;
   onUpdateDesign: (updates: Partial<DesignState>) => void;
+  onLayerDoubleClicked?: (layerId: string) => void;
 }
 
 export interface CanvasHandle {
   exportImage: () => Promise<string>;
   triggerFileUpload: () => void;
+  stampLayers: (layerIds: string[]) => Promise<string>;
 }
 
 // Helper: Hex to RGB
@@ -141,7 +143,7 @@ const measureTextLayout = (ctx: CanvasRenderingContext2D, layer: TextLayer, widt
     return { width: maxInkWidth + buffer, height: totalHeight };
 };
 
-const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enableZoom, className, onImageUpload, onPathDrawn, onUpdateDesign }, ref) => {
+const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enableZoom, className, onImageUpload, onPathDrawn, onUpdateDesign, onLayerDoubleClicked }, ref) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textCanvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -352,7 +354,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
       if (interactionMode === 'DRAW_PATH') {
           if (!coords) return;
           currentPathRef.current.push(coords);
-          renderToContext(textCanvasRef.current?.getContext('2d') || null, imgDims.w, imgDims.h, true);
+          renderToContext(textCanvasRef.current?.getContext('2d') || null, imgDims.w, imgDims.h, design.layers, true);
           return;
       }
 
@@ -839,6 +841,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
       ctx: CanvasRenderingContext2D | null, 
       width: number, 
       height: number,
+      layers: TextLayer[],
       isPreview: boolean = false,
       shouldClear: boolean = true,
       overrideBlendMode?: GlobalCompositeOperation,
@@ -862,7 +865,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
           }
       }
 
-      design.layers.forEach(layer => {
+      layers.forEach(layer => {
           if (!layer.visible) return;
 
           // 1. Clear Scratch
@@ -945,7 +948,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
           const ctx = textCanvasRef.current.getContext('2d');
           textCanvasRef.current.width = imgDims.w;
           textCanvasRef.current.height = imgDims.h;
-          renderToContext(ctx, imgDims.w, imgDims.h, true, true);
+          renderToContext(ctx, imgDims.w, imgDims.h, design.layers, true, true);
       }
   }, [imgDims, design, renderToContext]);
 
@@ -971,15 +974,45 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
     finalCanvas.height = img.naturalHeight;
 
     // Use the unified rendering pipeline.
-    renderToContext(finalCtx, finalCanvas.width, finalCanvas.height, false, true, undefined, img);
+    renderToContext(finalCtx, finalCanvas.width, finalCanvas.height, design.layers, false, true, undefined, img);
 
     return finalCanvas.toDataURL('image/png');
-  }, [imageSrc, renderToContext]);
+  }, [imageSrc, renderToContext, design.layers]);
+
+  // Stamp Layers Logic
+  const stampLayers = useCallback(async (layerIds: string[]): Promise<string> => {
+      if (!imageSrc) throw new Error("No image to stamp");
+      await document.fonts.ready;
+
+      const finalCanvas = document.createElement('canvas');
+      const finalCtx = finalCanvas.getContext('2d');
+      if (!finalCtx) throw new Error("Could not get canvas context");
+
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+          img.src = imageSrc;
+      });
+
+      finalCanvas.width = img.naturalWidth;
+      finalCanvas.height = img.naturalHeight;
+      
+      // Filter layers to only the ones we want to stamp
+      const layersToStamp = design.layers.filter(l => layerIds.includes(l.id));
+
+      renderToContext(finalCtx, finalCanvas.width, finalCanvas.height, layersToStamp, false, true, undefined, img);
+
+      return finalCanvas.toDataURL('image/png');
+  }, [imageSrc, renderToContext, design.layers]);
+
 
   useImperativeHandle(ref, () => ({
     exportImage: generateExport,
-    triggerFileUpload: () => fileInputRef.current?.click()
-  }), [generateExport]);
+    triggerFileUpload: () => fileInputRef.current?.click(),
+    stampLayers: stampLayers
+  }), [generateExport, stampLayers]);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault(); 
@@ -1220,6 +1253,10 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
       return (
         <div
             key={layerId}
+            onDoubleClick={(e) => {
+                e.stopPropagation();
+                if (onLayerDoubleClicked) onLayerDoubleClicked(layerId);
+            }}
             className={`absolute pointer-events-none group z-50 ${isPrimary ? 'z-[60]' : 'z-[50]'}`}
             style={{
                 left: `${gx}%`,
