@@ -1,6 +1,5 @@
 
-
-import { GoogleGenAI, Modality } from "@google/genai";
+import { GoogleGenAI, Modality, GenerateContentResponse } from "@google/genai";
 import { AspectRatio, Orientation, GenModel, ImageResolution } from "../types";
 
 // Initialize default client
@@ -12,6 +11,35 @@ const getClient = (apiKey?: string) => {
         return new GoogleGenAI({ apiKey });
     }
     return defaultAi;
+};
+
+// Helper: Wrap promise with abort signal support
+const withAbort = <T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> => {
+    if (!signal) return promise;
+    
+    return new Promise((resolve, reject) => {
+        const abortHandler = () => {
+            reject(new DOMException('Aborted', 'AbortError'));
+        };
+
+        if (signal.aborted) {
+            abortHandler();
+            return;
+        }
+
+        signal.addEventListener('abort', abortHandler);
+
+        promise.then(
+            (val) => {
+                signal.removeEventListener('abort', abortHandler);
+                resolve(val);
+            },
+            (err) => {
+                signal.removeEventListener('abort', abortHandler);
+                reject(err);
+            }
+        );
+    });
 };
 
 // Helper to determine the API-compatible aspect ratio string
@@ -47,7 +75,9 @@ export const generateBackgroundImage = async (
     orientation: 'landscape' | 'portrait' = 'landscape',
     apiKey?: string,
     model: GenModel = 'gemini-3-pro-image-preview',
-    resolution: ImageResolution = '1K'
+    resolution: ImageResolution = '1K',
+    signal?: AbortSignal,
+    logger?: (msg: string) => void
 ): Promise<string> => {
   try {
     const ai = getClient(apiKey);
@@ -65,7 +95,26 @@ export const generateBackgroundImage = async (
         config.imageConfig.imageSize = resolution;
     }
 
-    const response = await ai.models.generateContent({
+    // Calculate approximate request size
+    const requestPayloadJSON = JSON.stringify({
+        model,
+        contents: [{ parts: [{ text: `${prompt}. High quality...` }] }],
+        config
+    });
+    const requestSizeKB = (new TextEncoder().encode(requestPayloadJSON).length / 1024).toFixed(2);
+
+    if (logger) {
+        logger(`[REQUEST] Initiating Generation...`);
+        logger(`  Model: ${model}`);
+        logger(`  Resolution: ${resolution}`);
+        logger(`  Aspect Ratio: ${targetRatio}`);
+        logger(`  Payload Size: ~${requestSizeKB} KB`);
+        logger(`  Prompt: "${prompt}"`);
+    }
+
+    const startTime = Date.now();
+
+    const request = ai.models.generateContent({
       model: model,
       contents: {
         parts: [
@@ -75,18 +124,67 @@ export const generateBackgroundImage = async (
       config: config,
     });
 
+    if (logger) logger(`[STATUS] Waiting for server response...`);
+
+    const response = await withAbort(request, signal) as GenerateContentResponse;
+    
+    const latency = Date.now() - startTime;
+    if (logger) {
+        logger(`[RESPONSE] Received in ${latency}ms`);
+        logger(`  Candidate Count: ${response.candidates?.length || 0}`);
+    }
+
+    let textResponse = '';
+    let finishReason = '';
+
     // Parse response for image part
     for (const candidate of response.candidates || []) {
+        if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+            finishReason = candidate.finishReason;
+            if (logger) logger(`[WARNING] Finish Reason: ${finishReason}`);
+        }
+
         for (const part of candidate.content?.parts || []) {
             if (part.inlineData && part.inlineData.data) {
+                const sizeBytes = part.inlineData.data.length * 0.75; // Approx decoded size
+                const sizeMB = (sizeBytes / 1024 / 1024).toFixed(2);
+                
+                if (logger) {
+                    logger(`[SUCCESS] Image Data Extracted`);
+                    logger(`  Payload Size: ${sizeMB} MB`);
+                    logger(`  MimeType: ${part.inlineData.mimeType}`);
+                    if (model === 'gemini-3-pro-image-preview') {
+                        logger(`  Target Resolution: ${resolution} (${targetRatio})`);
+                    } else {
+                        logger(`  Target Aspect Ratio: ${targetRatio}`);
+                    }
+                }
                 return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+            }
+            if (part.text) {
+                textResponse += part.text + ' ';
             }
         }
     }
     
+    if (textResponse.trim()) {
+        if (logger) logger(`[ERROR] Model returned text: "${textResponse.trim().substring(0, 100)}..."`);
+        throw new Error(`Model returned text instead of image: "${textResponse.trim().substring(0, 200)}..."`);
+    }
+
+    if (finishReason) {
+         throw new Error(`Model finished with reason: ${finishReason} (Likely Safety or Filter Block)`);
+    }
+
     throw new Error("No image data received from model");
   } catch (error) {
+    // Re-throw if it's an abort error so the UI handles it as a cancellation
+    if (error instanceof DOMException && error.name === 'AbortError') {
+        if (logger) logger(`[ABORT] Request cancelled by user.`);
+        throw error;
+    }
     console.error("Image generation failed:", error);
+    if (logger) logger(`[ERROR] ${error instanceof Error ? error.message : JSON.stringify(error)}`);
     throw error;
   }
 };
@@ -102,7 +200,9 @@ export const editImage = async (
     orientation: Orientation, 
     apiKey?: string,
     model: GenModel = 'gemini-3-pro-image-preview',
-    resolution: ImageResolution = '1K'
+    resolution: ImageResolution = '1K',
+    signal?: AbortSignal,
+    logger?: (msg: string) => void
 ): Promise<string> => {
   try {
     const ai = getClient(apiKey);
@@ -116,6 +216,8 @@ export const editImage = async (
     const mimeType = matches[1];
     const data = matches[2];
 
+    const inputSizeMB = (data.length * 0.75) / 1024 / 1024;
+
     // Config depends on the model
     const config: any = {
         imageConfig: {
@@ -128,8 +230,19 @@ export const editImage = async (
         config.imageConfig.imageSize = resolution;
     }
 
+    if (logger) {
+        logger(`[REQUEST] Initiating Edit...`);
+        logger(`  Model: ${model}`);
+        logger(`  Input Image: ${inputSizeMB.toFixed(2)} MB (${mimeType})`);
+        logger(`  Target Resolution: ${resolution}`);
+        logger(`  Aspect Ratio: ${targetRatio}`);
+        logger(`  Prompt: "${prompt}"`);
+    }
+
+    const startTime = Date.now();
+
     // Use selected model for editing/inpainting capabilities
-    const response = await ai.models.generateContent({
+    const request = ai.models.generateContent({
       model: model,
       contents: {
         parts: [
@@ -147,19 +260,61 @@ export const editImage = async (
       config: config,
     });
 
+    if (logger) logger(`[STATUS] Sending payload to server...`);
+
+    const response = await withAbort(request, signal) as GenerateContentResponse;
+
+    const latency = Date.now() - startTime;
+    if (logger) {
+        logger(`[RESPONSE] Received in ${latency}ms`);
+    }
+
+    let textResponse = '';
+    let finishReason = '';
+
     // Parse response for image part (standard generateContent response structure)
     for (const candidate of response.candidates || []) {
+        if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+             finishReason = candidate.finishReason;
+             if (logger) logger(`[WARNING] Finish Reason: ${finishReason}`);
+        }
+
         for (const part of candidate.content?.parts || []) {
             if (part.inlineData && part.inlineData.data) {
+                const outputSizeBytes = part.inlineData.data.length * 0.75;
+                const sizeMB = (outputSizeBytes / 1024 / 1024).toFixed(2);
+                
+                if (logger) {
+                    logger(`[SUCCESS] Image Data Extracted`);
+                    logger(`  Payload Size: ${sizeMB} MB`);
+                    logger(`  MimeType: ${part.inlineData.mimeType}`);
+                }
                 return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
             }
+            if (part.text) {
+                textResponse += part.text + ' ';
+            }
         }
+    }
+    
+    if (textResponse.trim()) {
+        if (logger) logger(`[ERROR] Model returned text: "${textResponse.trim().substring(0, 100)}..."`);
+        throw new Error(`Model returned text instead of image: "${textResponse.trim().substring(0, 200)}..."`);
+    }
+
+    if (finishReason) {
+         throw new Error(`Model finished with reason: ${finishReason} (Likely Safety or Filter Block)`);
     }
     
     throw new Error("No image generated from edit request");
 
   } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+        if (logger) logger(`[ABORT] Request cancelled by user.`);
+        throw error;
+    }
     console.error("Image editing failed:", error);
+    if (logger) logger(`[ERROR] ${error instanceof Error ? error.message : JSON.stringify(error)}`);
     throw error;
   }
 };

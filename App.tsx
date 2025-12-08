@@ -1,11 +1,12 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import Canvas, { CanvasHandle } from './components/Canvas';
 import Controls, { ControlsHandle } from './components/Controls';
 import SettingsModal from './components/SettingsModal';
 import ConfirmationModal from './components/ConfirmationModal';
 import ErrorModal from './components/ErrorModal';
 import UrlImportModal from './components/UrlImportModal';
+import LoadingOverlay from './components/LoadingOverlay';
 import { DesignState, AppSettings, AspectRatio, Orientation, Point, TextLayer } from './types';
 import { generateBackgroundImage, editImage } from './services/geminiService';
 import { useKeyboard, KeyboardShortcut } from './hooks/useKeyboard';
@@ -111,13 +112,38 @@ export default function App() {
   const [imageHistory, setImageHistory] = useState<ImageHistoryItem[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
 
-  const [isGenerating, setIsGenerating] = useState(false);
+  // Loading & Abort State
+  const [isGenerating, setIsGenerating] = useState(false); // API call status
+  const [isOverlayVisible, setIsOverlayVisible] = useState(false); // UI visibility
+  const [loadingLogs, setLoadingLogs] = useState<string[]>([]);
+  const [showLoadingDebug, setShowLoadingDebug] = useState(false); 
   
+  // Ref to track debug state inside async closures to prevent stale state issues
+  const showLoadingDebugRef = useRef(showLoadingDebug);
+  
+  const abortControllerRef = useRef<AbortController | null>(null);
   const canvasRef = useRef<CanvasHandle>(null);
   const controlsRef = useRef<ControlsHandle>(null);
 
+  // Sync ref with state
+  useEffect(() => {
+    showLoadingDebugRef.current = showLoadingDebug;
+  }, [showLoadingDebug]);
+
+  // Helper: Log to Loading Overlay
+  const log = (message: string) => {
+      const timestamp = new Date().toLocaleTimeString();
+      setLoadingLogs(prev => [...prev, `[${timestamp}] ${message}`]);
+  };
+
   // --- Error Handling ---
   const handleApiError = (error: any) => {
+    // Don't show modal for aborts
+    if (error instanceof DOMException && error.name === 'AbortError') {
+        log("Process Cancelled by User.");
+        return;
+    }
+
     console.error("Application Error:", error);
     
     let title = 'An Unexpected Error Occurred';
@@ -136,12 +162,15 @@ export default function App() {
     } else if (errorMsg.includes('500') || errorMsg.includes('Internal') || errorMsg.includes('Server Error')) {
         title = 'Server Error (500)';
         message = 'The Gemini service encountered an internal error. This is usually temporary. Please try again.';
-    } else if (errorMsg.includes('Safety') || errorMsg.includes('blocked')) {
+    } else if (errorMsg.includes('Safety') || errorMsg.includes('blocked') || errorMsg.includes('finish reason')) {
         title = 'Content Blocked';
-        message = 'The request was blocked by safety filters. Please modify your prompt and try again.';
+        message = 'The request was blocked by safety filters. Please modify your prompt and try again. ' + (errorMsg ? `\nDetails: ${errorMsg}` : '');
     } else if (errorMsg.includes('Network') || errorMsg.includes('fetch')) {
         title = 'Network Error';
         message = 'Could not connect to the AI service. Please check your internet connection.';
+    } else if (errorMsg.includes('Model returned text')) {
+        title = 'Generation Failed';
+        message = errorMsg;
     }
 
     setErrorState({ isOpen: true, title, message });
@@ -151,11 +180,9 @@ export default function App() {
   const addToHistory = (newImageSrc: string, ratio: AspectRatio, orientation: Orientation, layers: TextLayer[]) => {
     const newItem: ImageHistoryItem = { src: newImageSrc, aspectRatio: ratio, orientation, layers };
     
-    // Slice if we are in middle of history
     const currentHistory = imageHistory.slice(0, historyIndex + 1);
     const newHistory = [...currentHistory, newItem];
     
-    // Limit to 10
     if (newHistory.length > 10) {
         newHistory.shift();
     }
@@ -175,10 +202,8 @@ export default function App() {
         setImageSrc(previousState.src);
         
         setDesign(prev => {
-            // Restore layers from history, resetting temporary path states
             const restoredLayers = previousState.layers.map(l => ({ ...l, pathPoints: [], isPathInputMode: false, isPathMoveMode: false }));
             
-            // Try to keep active layer ID if it exists in restored layers, else default to last or null
             let activeId = prev.activeLayerId;
             if (!restoredLayers.find(l => l.id === activeId)) {
                 activeId = restoredLayers.length > 0 ? restoredLayers[restoredLayers.length - 1].id : null;
@@ -225,10 +250,28 @@ export default function App() {
   };
 
   // --- Generation Handlers ---
+  const handleCancelGeneration = () => {
+      if (abortControllerRef.current) {
+          log("User requested cancellation...");
+          abortControllerRef.current.abort();
+      }
+      setIsGenerating(false);
+      setIsOverlayVisible(false);
+  };
+  
+  const handleCloseOverlay = () => {
+      setIsOverlayVisible(false);
+  };
+
   const handleGenerate = async () => {
     if (!design.prompt) return;
     
     setIsGenerating(true);
+    setIsOverlayVisible(true);
+    setLoadingLogs([]);
+    
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
 
     try {
       const imagePromise = generateBackgroundImage(
@@ -237,9 +280,13 @@ export default function App() {
           design.orientation, 
           settings.googleApiKey,
           settings.imageModel,
-          settings.imageResolution
+          settings.imageResolution,
+          signal,
+          (msg) => log(msg)
       );
+      
       const imgData = await imagePromise;
+      log("Image data received. Processing...");
       
       const newLayers = design.layers.map(l => ({
         ...l,
@@ -249,18 +296,31 @@ export default function App() {
         isPathMoveMode: false,
       }));
 
-      // Since generation creates a new scene, we record this state
       addToHistory(imgData, design.aspectRatio, design.orientation, newLayers);
       
       setDesign(prev => ({
         ...prev,
         layers: newLayers
       }));
+      log("Scene updated successfully.");
+      
+      setIsGenerating(false);
+      // Use Ref to check the LATEST debug state, not the stale closure state
+      if (!showLoadingDebugRef.current) {
+          setIsOverlayVisible(false);
+      }
 
     } catch (error) {
-      handleApiError(error);
-    } finally {
       setIsGenerating(false);
+      if (error instanceof DOMException && error.name === 'AbortError') {
+         return; 
+      }
+      // If error occurs, only close if NOT debugging.
+      // Use Ref to check latest state
+      if (!showLoadingDebugRef.current) {
+          setIsOverlayVisible(false);
+      }
+      handleApiError(error);
     }
   };
 
@@ -276,6 +336,12 @@ export default function App() {
       if (!imageSrc || !design.prompt) return;
       
       setIsGenerating(true);
+      setIsOverlayVisible(true);
+      setLoadingLogs([]);
+
+      abortControllerRef.current = new AbortController();
+      const signal = abortControllerRef.current.signal;
+
       try {
           const editedImgData = await editImage(
               imageSrc, 
@@ -284,13 +350,30 @@ export default function App() {
               design.orientation, 
               settings.googleApiKey,
               settings.imageModel,
-              settings.imageResolution
+              settings.imageResolution,
+              signal,
+              (msg) => log(msg)
           );
+          log("Response received. Updating canvas...");
           addToHistory(editedImgData, design.aspectRatio, design.orientation, design.layers);
-      } catch (error) {
-          handleApiError(error);
-      } finally {
+          log("Edit complete.");
+          
           setIsGenerating(false);
+          // Use Ref to check LATEST debug state
+          if (!showLoadingDebugRef.current) {
+              setIsOverlayVisible(false);
+          }
+
+      } catch (error) {
+          setIsGenerating(false);
+          if (error instanceof DOMException && error.name === 'AbortError') {
+              return;
+          }
+          // Use Ref to check LATEST debug state
+          if (!showLoadingDebugRef.current) {
+              setIsOverlayVisible(false);
+          }
+          handleApiError(error);
       }
   };
 
@@ -387,7 +470,6 @@ export default function App() {
                 }
             });
 
-            // Initial upload resets layers usually? Or keeps them? Let's keep them but reset paths.
             const cleanLayers = design.layers.map(l => ({ ...l, pathPoints: [], isPathInputMode: false, isPathMoveMode: false }));
             
             addToHistory(result, closestRatio, newOrientation, cleanLayers);
@@ -452,33 +534,23 @@ export default function App() {
   const handleStamp = async (idsToStamp: string[]) => {
       if (!canvasRef.current || !imageSrc) return;
       
-      // Capture the state of layers exactly as they are now, before async operation
-      // This is crucial: we want to snapshot the "Before" state which includes the vector layers.
       const layersSnapshot = design.layers;
 
       try {
-          // Perform the visual stamp (Async)
           const newImageSrc = await canvasRef.current.stampLayers(idsToStamp);
-          
-          // Calculate layers that remain vector (The filtered result for the "After" state)
           const remainingLayers = layersSnapshot.filter(l => !idsToStamp.includes(l.id));
 
-          // Manually update history to ensure atomicity.
-          // We assume 'historyIndex' is stable during this operation (user actions blocked or unlikely)
           setImageHistory(prev => {
               const historyUpToNow = prev.slice(0, historyIndex + 1);
 
-              // 1. UPDATE CURRENT TIP: Snapshot the vector layers before they disappear.
-              // This fixes the issue where Undo would restore to a state WITHOUT the vector layers.
               if (historyUpToNow.length > 0) {
                   const currentTip = historyUpToNow[historyUpToNow.length - 1];
                   historyUpToNow[historyUpToNow.length - 1] = {
                       ...currentTip,
-                      layers: layersSnapshot // <--- THIS SAVES THE VECTORS FOR UNDO
+                      layers: layersSnapshot
                   };
               }
 
-              // 2. ADD NEW TIP: The Result of the Stamp
               const newItem: ImageHistoryItem = {
                   src: newImageSrc,
                   aspectRatio: design.aspectRatio,
@@ -492,13 +564,11 @@ export default function App() {
                   newHistory.shift();
               }
               
-              // Sync history index
               setHistoryIndex(newHistory.length - 1);
               
               return newHistory;
           });
 
-          // Update current view
           setImageSrc(newImageSrc);
           
           setDesign(prev => {
@@ -539,7 +609,7 @@ export default function App() {
   const shortcuts: KeyboardShortcut[] = [
     {
         id: 'undo',
-        combo: { key: 'z', ctrl: true }, // ctrl: true matches both Ctrl and Meta (Cmd) in useKeyboard
+        combo: { key: 'z', ctrl: true }, 
         action: handleUndo
     },
     {
@@ -552,6 +622,17 @@ export default function App() {
 
   return (
     <div className="h-screen w-screen flex flex-col md:flex-row bg-black text-white">
+      {/* Loading Overlay */}
+      <LoadingOverlay 
+        isVisible={isOverlayVisible}
+        isProcessing={isGenerating}
+        onCancel={handleCancelGeneration} 
+        onClose={handleCloseOverlay}
+        logs={loadingLogs}
+        showDebug={showLoadingDebug}
+        setShowDebug={setShowLoadingDebug}
+      />
+
       {/* Left: Canvas Area */}
       <div className="flex-1 bg-neutral-950 flex items-center justify-center p-8 relative overflow-hidden">
         <Canvas 
