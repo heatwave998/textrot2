@@ -258,7 +258,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                              <div className="absolute top-0 right-0 p-1">
                                 <span className="text-[9px] text-neutral-600 bg-neutral-900 border border-neutral-800 px-1 rounded">LOG</span>
                              </div>
-                             <pre className="w-full h-32 bg-black border border-neutral-800 rounded-[3px] p-2 text-[9px] font-mono text-green-500/90 overflow-y-auto whitespace-pre-wrap leading-relaxed shadow-inner">
+                             <pre className="w-full h-40 bg-black border border-neutral-800 rounded-[5px] p-2 text-[9px] font-mono text-green-500/90 overflow-y-auto whitespace-pre-wrap leading-relaxed shadow-inner">
                                 {debugLog || "// Waiting for validation request..."}
                              </pre>
                         </div>

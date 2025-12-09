@@ -137,6 +137,7 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
   // Mapped as requested: Shift+1 for Layers through Shift+8 for Blending
   const panelShortcuts = useMemo(() => [
     { id: 'toggle-all', combo: { code: 'Backquote', shift: true }, action: toggleAllPanels },
+    { id: 'toggle-gen', combo: { code: 'Digit0', shift: true}, action: () => togglePanel('gen') },
     { id: 'toggle-layers', combo: { code: 'Digit1', shift: true }, action: () => togglePanel('layers') },
     { id: 'toggle-content', combo: { code: 'Digit2', shift: true }, action: () => togglePanel('content') },
     { id: 'toggle-typography', combo: { code: 'Digit3', shift: true }, action: () => togglePanel('typography') },
@@ -463,33 +464,8 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
             onToggle={() => togglePanel('gen')}
         >
           <div className="space-y-4 pt-1">
-            <div className="flex items-center justify-between">
-                <label className="block text-xs font-bold text-neutral-200 uppercase tracking-wider">Image Prompt</label>
-                <div className="flex items-center gap-1">
-                  <button 
-                      onClick={onUndo}
-                      disabled={!canUndo}
-                      className={`p-1 rounded-[3px] transition-colors ${canUndo ? 'text-neutral-400 hover:text-white hover:bg-neutral-800' : 'text-neutral-800 cursor-not-allowed'}`}
-                  >
-                      <Undo2 size={16} />
-                  </button>
-                  <button 
-                      onClick={onRedo}
-                      disabled={!canRedo}
-                      className={`p-1 rounded-[3px] transition-colors ${canRedo ? 'text-neutral-400 hover:text-white hover:bg-neutral-800' : 'text-neutral-800 cursor-not-allowed'}`}
-                  >
-                      <Redo2 size={16} />
-                  </button>
-                </div>
-            </div>
-            <textarea 
-              className="w-full bg-neutral-950 border border-neutral-800 rounded-[3px] p-3 text-sm focus:outline-none focus:border-pink-500 transition-colors resize-y min-h-[6rem]"
-              placeholder="e.g. A cyberpunk samurai in neon rain..."
-              value={design.prompt}
-              onChange={(e) => updateGlobal('prompt', e.target.value)}
-            />
 
-            {/* Model & Resolution Controls */}
+            {/* MOVED UP: Model & Resolution Controls */}
             <div className="flex items-center justify-between">
                 {/* Resolution Toggles */}
                 <div className="flex bg-neutral-950 p-0.5 rounded-[3px] border border-neutral-800">
@@ -525,6 +501,7 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
                 </div>
             </div>
             
+            {/* MOVED UP: Aspect Ratio & Orientation */}
             <div className="space-y-2">
                 <div className="flex justify-between items-center">
                     <label className="block text-xs font-bold text-neutral-500 uppercase tracking-wider">Aspect Ratio</label>
@@ -557,57 +534,81 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
                 </div>
             </div>
 
-            {/* ACTION BUTTONS GRID */}
-            <div className="space-y-2">
-                {/* Row 1: Generate & Edit */}
-                <div className="flex gap-2 h-10">
-                    <button 
-                        onClick={onGenerate}
-                        disabled={isGenerateDisabled}
-                        className={`flex-1 rounded-[3px] font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg ${isGenerateDisabled ? 'bg-neutral-800 text-neutral-600 cursor-not-allowed opacity-70' : 'bg-gradient-to-r from-pink-500 to-violet-600 text-white hover:brightness-110 hover:shadow-pink-500/20'}`}
-                    >
-                        {isGenerating ? <span className="animate-spin rounded-full h-4 w-4 border-2 border-white/30 border-t-white"></span> : <><Sparkles size={16} /> Generate</>}
+            {/* MOVED UP: Utility Buttons */}
+            <div className="flex gap-2 h-9">
+                <Tooltip content="Reset / Blank Canvas" position="bottom" className="flex-1">
+                    <button onClick={onBlank} className="w-full h-full bg-neutral-800 hover:bg-neutral-700 text-white rounded-[3px] flex items-center justify-center gap-2 text-xs font-medium border border-neutral-700/50 transition-colors"> 
+                        <FilePlus size={14} /> Blank
                     </button>
-                    
-                    <div className="flex-1">
-                        <Tooltip content="Edit Image (Inpainting)" position="bottom" className="w-full h-full">
-                            <div className={`relative w-full h-full rounded-[3px] group ${isEditDisabled ? '' : 'p-[1px]'}`}>
-                                {!isEditDisabled && (
-                                    <>
-                                        {/* Rainbow Border Gradient */}
-                                        <div className="absolute inset-0 bg-gradient-to-r from-red-500 via-yellow-500 via-green-500 via-blue-500 to-purple-500 rounded-[3px] opacity-100"></div>
-                                        {/* Rainbow Glow */}
-                                        <div className="absolute inset-0 bg-gradient-to-r from-red-500 via-yellow-500 via-green-500 via-blue-500 to-purple-500 rounded-[3px] blur-[4px] opacity-30 group-hover:opacity-70 transition-opacity duration-300"></div>
-                                    </>
-                                )}
-                                <button 
-                                    onClick={onEdit} 
-                                    disabled={isEditDisabled} 
-                                    className={`relative w-full h-full rounded-[2px] font-bold text-sm flex items-center justify-center gap-2 transition-all ${isEditDisabled ? 'bg-neutral-800 text-neutral-600 cursor-not-allowed opacity-70' : 'bg-neutral-900 text-white hover:bg-neutral-800'}`}
-                                > 
-                                    <Paintbrush size={16} /> Edit
-                                </button>
-                            </div>
-                        </Tooltip>
-                    </div>
-                </div>
+                </Tooltip>
+                <Tooltip content="Upload Image" position="bottom" className="flex-1">
+                    <button onClick={onUpload} className="w-full h-full bg-neutral-800 hover:bg-neutral-700 text-white rounded-[3px] flex items-center justify-center gap-2 text-xs font-medium border border-neutral-700/50 transition-colors"> 
+                        <ImagePlus size={14} /> Upload
+                    </button>
+                </Tooltip>
+                <Tooltip content="Load from URL" position="bottom" className="flex-1">
+                    <button onClick={onUrlImport} className="w-full h-full bg-neutral-800 hover:bg-neutral-700 text-white rounded-[3px] flex items-center justify-center gap-2 text-xs font-medium border border-neutral-700/50 transition-colors"> 
+                        <LinkIcon size={14} /> Link
+                    </button>
+                </Tooltip>
+            </div>
 
-                {/* Row 2: Utilities */}
-                <div className="flex gap-2 h-9">
-                    <Tooltip content="Reset / Blank Canvas" position="bottom" className="flex-1">
-                        <button onClick={onBlank} className="w-full h-full bg-neutral-800 hover:bg-neutral-700 text-white rounded-[3px] flex items-center justify-center gap-2 text-xs font-medium border border-neutral-700/50 transition-colors"> 
-                            <FilePlus size={14} /> Blank
-                        </button>
-                    </Tooltip>
-                    <Tooltip content="Upload Image" position="bottom" className="flex-1">
-                        <button onClick={onUpload} className="w-full h-full bg-neutral-800 hover:bg-neutral-700 text-white rounded-[3px] flex items-center justify-center gap-2 text-xs font-medium border border-neutral-700/50 transition-colors"> 
-                            <ImagePlus size={14} /> Upload
-                        </button>
-                    </Tooltip>
-                    <Tooltip content="Load from URL" position="bottom" className="flex-1">
-                        <button onClick={onUrlImport} className="w-full h-full bg-neutral-800 hover:bg-neutral-700 text-white rounded-[3px] flex items-center justify-center gap-2 text-xs font-medium border border-neutral-700/50 transition-colors"> 
-                            <LinkIcon size={14} /> Link
-                        </button>
+            {/* Image Prompt Section */}
+            <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-neutral-200 uppercase tracking-wider">Image Prompt</label>
+                <div className="flex items-center gap-1">
+                  <button 
+                      onClick={onUndo}
+                      disabled={!canUndo}
+                      className={`p-1 rounded-[3px] transition-colors ${canUndo ? 'text-neutral-400 hover:text-white hover:bg-neutral-800' : 'text-neutral-800 cursor-not-allowed'}`}
+                  >
+                      <Undo2 size={16} />
+                  </button>
+                  <button 
+                      onClick={onRedo}
+                      disabled={!canRedo}
+                      className={`p-1 rounded-[3px] transition-colors ${canRedo ? 'text-neutral-400 hover:text-white hover:bg-neutral-800' : 'text-neutral-800 cursor-not-allowed'}`}
+                  >
+                      <Redo2 size={16} />
+                  </button>
+                </div>
+            </div>
+            <textarea 
+              className="w-full bg-neutral-950 border border-neutral-800 rounded-[3px] p-3 text-sm focus:outline-none focus:border-pink-500 transition-colors resize-y min-h-[6rem]"
+              placeholder="e.g. A cyberpunk samurai in neon rain..."
+              value={design.prompt}
+              onChange={(e) => updateGlobal('prompt', e.target.value)}
+            />
+
+            {/* Generate & Edit Buttons */}
+            <div className="flex gap-2 h-10">
+                <button 
+                    onClick={onGenerate}
+                    disabled={isGenerateDisabled}
+                    className={`flex-1 rounded-[3px] font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-lg ${isGenerateDisabled ? 'bg-neutral-800 text-neutral-600 cursor-not-allowed opacity-70' : 'bg-gradient-to-r from-pink-500 to-violet-600 text-white hover:brightness-110 hover:shadow-pink-500/20'}`}
+                >
+                    {isGenerating ? <span className="animate-spin rounded-full h-4 w-4 border-2 border-white/30 border-t-white"></span> : <><Sparkles size={16} /> Generate</>}
+                </button>
+                
+                <div className="flex-1">
+                    <Tooltip content="Edit Image (Inpainting)" position="bottom" className="w-full h-full">
+                        <div className={`relative w-full h-full rounded-[3px] group ${isEditDisabled ? '' : 'p-[1px]'}`}>
+                            {!isEditDisabled && (
+                                <>
+                                    {/* Rainbow Border Gradient */}
+                                    <div className="absolute inset-0 bg-gradient-to-r from-red-500 via-yellow-500 via-green-500 via-blue-500 to-purple-500 rounded-[3px] opacity-100"></div>
+                                    {/* Rainbow Glow */}
+                                    <div className="absolute inset-0 bg-gradient-to-r from-red-500 via-yellow-500 via-green-500 via-blue-500 to-purple-500 rounded-[3px] blur-[4px] opacity-30 group-hover:opacity-70 transition-opacity duration-300"></div>
+                                </>
+                            )}
+                            <button 
+                                onClick={onEdit} 
+                                disabled={isEditDisabled} 
+                                className={`relative w-full h-full rounded-[2px] font-bold text-sm flex items-center justify-center gap-2 transition-all ${isEditDisabled ? 'bg-neutral-800 text-neutral-600 cursor-not-allowed opacity-70' : 'bg-neutral-900 text-white hover:bg-neutral-800'}`}
+                            > 
+                                <Paintbrush size={16} /> Edit
+                            </button>
+                        </div>
                     </Tooltip>
                 </div>
             </div>

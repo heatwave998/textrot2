@@ -271,6 +271,14 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
     }
   };
 
+  // Handle Double Click to Reset Zoom
+  const handleCanvasDoubleClick = (e: React.MouseEvent) => {
+      if (imageSrc) {
+          setZoomScale(1);
+          setPan({ x: 0, y: 0 });
+      }
+  };
+
   // Helper to map screen event coordinates to Intrinsic Image Coordinates
   const getIntrinsicCoordinates = (e: React.MouseEvent) => {
       if (!containerRef.current || !imgDims) return null;
@@ -1358,6 +1366,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
+      onDoubleClick={handleCanvasDoubleClick}
       style={{ cursor: cursorStyle }}
     >
       <div 
