@@ -1,4 +1,6 @@
 
+
+
 import React, { useState, useCallback, useMemo, forwardRef, useImperativeHandle, useRef } from 'react';
 import { DesignState, FontFamily, AspectRatio, TextLayer, AppSettings, GenModel, ImageResolution } from '../types';
 import { 
@@ -8,7 +10,8 @@ import {
   Monitor, Smartphone, AlignCenterHorizontal, PenTool, Trash2, Route,
   AlignLeft, AlignCenter, AlignRight, Move, Activity,
   Maximize, MoveHorizontal, MoveVertical, Undo2, Redo2, ToggleRight, ToggleLeft, Paintbrush,
-  Plus, Eye, EyeOff, ChevronUp, ChevronDown, Wand2, BoxSelect, BookType, Link as LinkIcon, Stamp
+  Plus, Eye, EyeOff, ChevronUp, ChevronDown, Wand2, BoxSelect, BookType, Link as LinkIcon, Stamp,
+  Sliders
 } from 'lucide-react';
 import SliderControl from './SliderControl';
 import EffectsControls from './EffectsControls';
@@ -17,7 +20,7 @@ import FontBookModal from './FontBookModal';
 import CollapsibleSection from './CollapsibleSection';
 import Tooltip from './Tooltip';
 import { useIsKeyPressed, useKeyboard } from '../hooks/useKeyboard';
-import { FONTS } from '../constants';
+import { FONTS, VARIABLE_FONTS } from '../constants';
 
 interface ControlsProps {
   design: DesignState;
@@ -134,7 +137,6 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
   }), [focusTextInputInternal]);
 
   // Keyboard Shortcuts for Panel Toggles
-  // Mapped as requested: Shift+1 for Layers through Shift+8 for Blending
   const panelShortcuts = useMemo(() => [
     { id: 'toggle-all', combo: { code: 'Backquote', shift: true }, action: toggleAllPanels },
     { id: 'toggle-gen', combo: { code: 'Digit0', shift: true}, action: () => togglePanel('gen') },
@@ -231,6 +233,23 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
     }));
   };
 
+  const updateFontVariation = (axisTag: string, value: number) => {
+    if (!design.activeLayerId) return;
+    setDesign(prev => ({
+        ...prev,
+        layers: prev.layers.map(l => {
+            if (!prev.selectedLayerIds.includes(l.id)) return l;
+            return {
+                ...l,
+                fontVariations: {
+                    ...l.fontVariations,
+                    [axisTag]: value
+                }
+            };
+        })
+    }));
+  };
+
   const toggleLayer = (key: keyof TextLayer) => {
     if (!activeLayer) return;
     // We toggle based on the active layer's state, enforcing consistency across selection
@@ -311,6 +330,7 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
         overlayPosition: { x: 50, y: 50 },
         blendMode: 'normal',
         opacity: 1,
+        fontVariations: {},
         pathPoints: [],
         pathSmoothing: 5,
         isPathInputMode: false,
@@ -432,6 +452,9 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
   // Computed states for buttons
   const isGenerateDisabled = isGenerating || !design.prompt.trim();
   const isEditDisabled = isGenerating || !hasImage || !design.prompt.trim();
+
+  // Get Variable Axes for current font
+  const variableConfig = activeLayer ? VARIABLE_FONTS[activeLayer.fontFamily] : undefined;
 
   return (
     <div className="h-full flex flex-col bg-neutral-900 border-l border-neutral-800 overflow-hidden">
@@ -766,11 +789,32 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
                 <BookType size={16} className="text-neutral-600 group-hover:text-white transition-colors" />
             </button>
 
-            <div className="flex gap-1 bg-neutral-950 rounded-[6px] p-1 border border-neutral-800">
+            <div className="flex gap-1 bg-neutral-950 rounded-[6px] p-1 border border-neutral-800 mb-2">
                 <button onClick={() => toggleLayer('isBold')} className={`flex-1 h-10 rounded-[3px] hover:bg-neutral-800 flex items-center justify-center ${activeLayer.isBold ? 'bg-neutral-800 text-pink-500' : 'text-neutral-400'}`}><Bold size={18} strokeWidth={3} /></button>
                 <button onClick={() => toggleLayer('isItalic')} className={`flex-1 h-10 rounded-[3px] hover:bg-neutral-800 flex items-center justify-center ${activeLayer.isItalic ? 'bg-neutral-800 text-pink-500' : 'text-neutral-400'}`}><Italic size={18} /></button>
                 <button onClick={() => toggleLayer('isUppercase')} className={`flex-1 h-10 rounded-[3px] hover:bg-neutral-800 flex items-center justify-center ${activeLayer.isUppercase ? 'bg-neutral-800 text-pink-500' : 'text-neutral-400'}`}><CaseUpper size={28} /></button>
             </div>
+
+            {/* Variable Font Sliders */}
+            {variableConfig && variableConfig.axes.length > 0 && (
+                 <div className="mb-3 space-y-2 bg-neutral-950 border border-neutral-800 p-2 rounded-[3px] animate-in slide-in-from-top-1 fade-in">
+                    <div className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider mb-1 flex items-center gap-1">
+                        <Sliders size={10} /> Variable Axes
+                    </div>
+                    {variableConfig.axes.map(axis => (
+                        <SliderControl 
+                            key={axis.tag}
+                            label={axis.name}
+                            value={activeLayer.fontVariations?.[axis.tag] ?? axis.defaultValue}
+                            setValue={(v) => updateFontVariation(axis.tag, v)}
+                            min={axis.min}
+                            max={axis.max}
+                            step={axis.step}
+                            defaultValue={axis.defaultValue}
+                        />
+                    ))}
+                 </div>
+            )}
 
             <div className="flex gap-2">
                   <div className="flex-1 flex gap-1 bg-neutral-950 rounded-[3px] p-1 border border-neutral-800">

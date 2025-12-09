@@ -21,6 +21,113 @@ export const FONTS: FontFamily[] = [
   'Turret Road', 'Unbounded', 'UnifrakturMaguntia', 'VT323', 'Vast Shadow', 'Wallpoet', 'Workbench', 'Zen Dots'
 ];
 
+// Variable Font Axis Definition
+export interface FontAxis {
+  tag: string;       // e.g. 'wght', 'wdth', 'WONK'
+  name: string;      // e.g. 'Weight', 'Width', 'Wonkiness'
+  min: number;
+  max: number;
+  defaultValue: number;
+  step: number;
+}
+
+export interface VariableFontConfig {
+  axes: FontAxis[];
+}
+
+// Registry of known variable capabilities for fonts in our library
+// Note: This matches the Google Fonts variable axes ranges where applicable.
+export const VARIABLE_FONTS: Partial<Record<FontFamily, VariableFontConfig>> = {
+  'Bodoni Moda': {
+    axes: [
+      { tag: 'wght', name: 'Weight', min: 400, max: 900, defaultValue: 400, step: 1 },
+      // Italic is usually a toggle, but Bodoni Moda variable axes includes 'opsz' in some versions, 
+      // though Google Fonts mainly exposes wght and ital.
+    ]
+  },
+  'Inter': {
+    axes: [
+      { tag: 'wght', name: 'Weight', min: 100, max: 900, defaultValue: 400, step: 10 },
+      // slnt is -10 to 0 on Inter variable, but our static import might only snap to specific weights.
+      // We expose it for robustness.
+    ]
+  },
+  'Josefin Sans': {
+    axes: [
+      { tag: 'wght', name: 'Weight', min: 100, max: 700, defaultValue: 400, step: 1 }
+    ]
+  },
+  'Lora': {
+    axes: [
+      { tag: 'wght', name: 'Weight', min: 400, max: 700, defaultValue: 400, step: 1 }
+    ]
+  },
+  'Merriweather': {
+    axes: [
+       { tag: 'wght', name: 'Weight', min: 300, max: 900, defaultValue: 400, step: 1 }
+    ]
+  },
+  'Montserrat': {
+    axes: [
+      { tag: 'wght', name: 'Weight', min: 100, max: 900, defaultValue: 400, step: 10 }
+    ]
+  },
+  'Noto Sans': {
+    axes: [
+      { tag: 'wght', name: 'Weight', min: 100, max: 900, defaultValue: 400, step: 1 },
+      { tag: 'wdth', name: 'Width', min: 62.5, max: 100, defaultValue: 100, step: 0.1 }
+    ]
+  },
+  'Open Sans': {
+    axes: [
+      { tag: 'wght', name: 'Weight', min: 300, max: 800, defaultValue: 400, step: 1 },
+      { tag: 'wdth', name: 'Width', min: 75, max: 100, defaultValue: 100, step: 0.1 }
+    ]
+  },
+  'Oswald': {
+    axes: [
+      { tag: 'wght', name: 'Weight', min: 200, max: 700, defaultValue: 400, step: 1 }
+    ]
+  },
+  'Playfair Display': {
+    axes: [
+      { tag: 'wght', name: 'Weight', min: 400, max: 900, defaultValue: 400, step: 1 }
+    ]
+  },
+  'Raleway': {
+    axes: [
+      { tag: 'wght', name: 'Weight', min: 100, max: 900, defaultValue: 400, step: 1 }
+    ]
+  },
+  'Roboto': {
+    axes: [
+      { tag: 'wght', name: 'Weight', min: 100, max: 900, defaultValue: 400, step: 10 },
+      { tag: 'wdth', name: 'Width', min: 75, max: 100, defaultValue: 100, step: 0.1 }
+    ]
+  },
+  'Source Sans 3': {
+    axes: [
+      { tag: 'wght', name: 'Weight', min: 200, max: 900, defaultValue: 400, step: 1 }
+    ]
+  },
+  'Space Grotesque': {
+    axes: [
+      { tag: 'wght', name: 'Weight', min: 300, max: 700, defaultValue: 400, step: 1 }
+    ]
+  },
+  'Unbounded': {
+     axes: [
+       { tag: 'wght', name: 'Weight', min: 200, max: 900, defaultValue: 400, step: 1 }
+     ]
+  },
+  'Fira Code': {
+    axes: [
+       { tag: 'wght', name: 'Weight', min: 300, max: 700, defaultValue: 400, step: 1 }
+    ]
+  }
+};
+
+
 // Helper to map fonts to categories
 export const getFontCategory = (font: FontFamily): string => {
   const map: Record<string, string[]> = {

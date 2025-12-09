@@ -1,4 +1,6 @@
 
+
+
 import React, { useRef, useState, forwardRef, useImperativeHandle, useEffect, useCallback } from 'react';
 import { DesignState, Point, TextLayer } from '../types';
 import { Upload, Maximize2, PenTool, RotateCw, Move as MoveIcon } from 'lucide-react';
@@ -123,7 +125,13 @@ const measureLineMetrics = (ctx: CanvasRenderingContext2D, text: string, letterS
 
 const measureTextLayout = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: number) => {
     const fontSize = (layer.textSize / 100) * width;
-    ctx.font = `${layer.isItalic ? 'italic' : 'normal'} ${layer.isBold ? 'bold' : 'normal'} ${fontSize}px "${layer.fontFamily}"`;
+    
+    // Variable Font Support Logic
+    const weight = layer.fontVariations?.['wght'] ? Math.round(layer.fontVariations['wght']) : (layer.isBold ? 700 : 400);
+    // Note: Canvas font string supports 'condensed', 'semi-condensed' etc, but rarely raw numbers for width unless using font-stretch css mapping
+    // We stick to constructing standard font string for measurements
+    
+    ctx.font = `${layer.isItalic ? 'italic' : 'normal'} ${weight} ${fontSize}px "${layer.fontFamily}"`;
     
     const scaledLetterSpacing = layer.letterSpacing * (fontSize / 50);
     const rawText = layer.isUppercase ? layer.textOverlay.toUpperCase() : layer.textOverlay;
@@ -547,10 +555,19 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
     if (interactionMode === 'DRAW_PATH' && isActive) return; 
 
     const fontSize = (layer.textSize / 100) * width;
-    const fontWeight = layer.isBold ? 'bold' : 'normal';
+
+    // --- Variable Font Application ---
+    // If 'wght' is present in variations, use it. Otherwise use bold toggle.
+    const weight = layer.fontVariations?.['wght'] ? Math.round(layer.fontVariations['wght']) : (layer.isBold ? 700 : 400);
     const fontStyle = layer.isItalic ? 'italic' : 'normal';
+
+    // Canvas font string construction
+    ctx.font = `${fontStyle} ${weight} ${fontSize}px "${layer.fontFamily}"`;
     
-    ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px "${layer.fontFamily}"`;
+    // Note: 'wdth' is supported in CSS via font-stretch, but limited in Canvas font string in some browsers.
+    // If we wanted to support width, we might try: `ctx.font = "condensed 700 20px Inter"` etc, 
+    // but mapping numeric width to keywords is lossy.
+    
     ctx.textAlign = 'left'; 
     ctx.textBaseline = 'middle';
 

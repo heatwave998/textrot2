@@ -140,6 +140,10 @@ export interface TextLayer {
   blendMode: 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten' | 'color-dodge' | 'color-burn' | 'hard-light' | 'soft-light' | 'difference' | 'exclusion' | 'hue' | 'saturation' | 'color' | 'luminosity';
   opacity: number;
   
+  // Font Variations (Variable Fonts)
+  // Stores raw axis values like { 'wght': 700, 'wdth': 100, 'WONK': 1 }
+  fontVariations: Record<string, number>;
+
   // Path / Curve Data
   pathPoints: Point[]; // Array of coordinates relative to the image dimensions
   pathSmoothing: number; // 0-20 iterations of smoothing

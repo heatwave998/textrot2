@@ -1,4 +1,6 @@
 
+
+
 import React, { useState, useRef, useEffect } from 'react';
 import Canvas, { CanvasHandle } from './components/Canvas';
 import Controls, { ControlsHandle } from './components/Controls';
@@ -29,6 +31,9 @@ const createLayer = (id: string, text: string = 'EDIT ME'): TextLayer => ({
   blendMode: 'normal',
   opacity: 1,
   
+  // Font Variations (Variable Fonts)
+  fontVariations: {},
+
   pathPoints: [],
   pathSmoothing: 5,
   isPathInputMode: false,
