@@ -8,13 +8,14 @@ export const FONT_CATEGORIES = {
   DISPLAY: 'Display',
   HANDWRITING: 'Handwriting',
   MONO: 'Monospace',
-  ALIEN: 'Alien / Sci-Fi'
+  ALIEN: 'Alien / Sci-Fi',
+  FANCY: 'Fancy'
 };
 
 export const FONTS: FontFamily[] = [
   'Abril Fatface', 'Alfa Slab One', 'Amatic SC', 'Anton', 'Audiowide', 'Bangers', 'Bebas Neue', 'Bodoni Moda', 'Bungee Shade', 'Butcherman', 'Cinzel',
   'Cormorant Garamond', 'Creepster', 'Crimson Text', 'Diplomata', 'DM Serif Display', 'Dancing Script', 'DotGothic16', 'Eater', 'Eduardo Tunni', 'Ewert', 'Fascinate Inline', 'Finger Paint', 'Fira Code',
-  'Foldit', 'Frijole', 'Geostar', 'Gloria Hallelujah', 'Great Vibes', 'Grenze Gotisch', 'Inter', 'Italiana', 'Jacquard 12', 'Jersey 10', 'Josefin Sans', 'Kablammo', 'Krona One', 'Lato', 'League Gothic', 'Libre Baskerville',
+  'Foldit', 'Fraunces', 'Frijole', 'Geostar', 'Gloria Hallelujah', 'Great Vibes', 'Grenze Gotisch', 'Inter', 'Italiana', 'Jacquard 12', 'Jersey 10', 'Josefin Sans', 'Kablammo', 'Krona One', 'Lato', 'League Gothic', 'Libre Baskerville',
   'Lobster', 'Lora', 'Major Mono Display', 'Megrim', 'Merriweather', 'Metal Mania', 'Michroma', 'Micro 5', 'Monoton', 'Montserrat', 'Nosifer', 'Noto Sans', 'Oi', 'Open Sans', 'Orbitron', 'Oswald', 'Oxanium',
   'PT Sans', 'PT Serif', 'Pacifico', 'Permanent Marker', 'Piedra', 'Pixelify Sans', 'Plaster', 'Playfair Display', 'Poiret One', 'Poppins', 'Press Start 2P', 'Quantico', 'Raleway', 'Righteous',
   'Roboto', 'Rock Salt', 'Rubik 80s Fade', 'Rubik Beastly', 'Rubik Burned', 'Rubik Glitch', 'Rubik Iso', 'Rubik Marker Hatch', 'Rubik Microbe', 'Rubik Puddles', 'Rubik Wet Paint', 'Rye', 'Sancreek', 'Shadows Into Light', 'Share Tech Mono', 'Shojumaru', 'Silkscreen', 'Sixtyfour', 'Slackey', 'Smokum', 'Source Sans 3', 'Space Grotesque', 'Space Mono', 'Special Elite', 'Syne',
@@ -43,6 +44,14 @@ export const VARIABLE_FONTS: Partial<Record<FontFamily, VariableFontConfig>> = {
       { tag: 'wght', name: 'Weight', min: 400, max: 900, defaultValue: 400, step: 1 },
       // Italic is usually a toggle, but Bodoni Moda variable axes includes 'opsz' in some versions, 
       // though Google Fonts mainly exposes wght and ital.
+    ]
+  },
+  'Fraunces': {
+    axes: [
+      { tag: 'wght', name: 'Weight', min: 100, max: 900, defaultValue: 400, step: 10 },
+      { tag: 'opsz', name: 'Optical Size', min: 9, max: 144, defaultValue: 12, step: 0.1 },
+      { tag: 'SOFT', name: 'Softness', min: 0, max: 100, defaultValue: 0, step: 1 },
+      { tag: 'WONK', name: 'Wonkiness', min: 0, max: 1, defaultValue: 0, step: 0.01 }
     ]
   },
   'Inter': {
@@ -123,7 +132,7 @@ export const VARIABLE_FONTS: Partial<Record<FontFamily, VariableFontConfig>> = {
   'Fira Code': {
     axes: [
        { tag: 'wght', name: 'Weight', min: 300, max: 700, defaultValue: 400, step: 1 }
-    ]
+     ]
   }
 };
 
@@ -162,6 +171,9 @@ export const getFontCategory = (font: FontFamily): string => {
         'UnifrakturMaguntia', 'Rye', 'Foldit', 'Kablammo', 'Rubik Iso', 'Rubik 80s Fade',
         'Rubik Burned', 'Rubik Marker Hatch', 'Rubik Puddles', 'Diplomata', 'Geostar', 
         'Ewert', 'Grenze Gotisch', 'Vast Shadow', 'Workbench', 'Slackey', 'Smokum', 'Oi'
+    ],
+    [FONT_CATEGORIES.FANCY]: [
+        'Fraunces'
     ]
   };
 

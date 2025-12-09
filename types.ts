@@ -31,6 +31,7 @@ export type FontFamily =
   | 'Finger Paint'
   | 'Fira Code'
   | 'Foldit'
+  | 'Fraunces'
   | 'Frijole'
   | 'Geostar'
   | 'Gloria Hallelujah'
