@@ -80,78 +80,92 @@ const getPathBounds = (points: Point[]) => {
     };
 };
 
-// --- Render Logic Helpers ---
-
-/**
- * Generates all CSS styles needed for effects (Shadow, Echo, Gradient, Outline).
- * Note: Glitch is handled structurally now, so we removed it from here to avoid text-shadow duplication.
- */
-const generateLayerStyles = (layer: TextLayer, fontSizePx: number, width: number) => {
-    const styles: any = {};
-    const shadows: string[] = [];
-
-    // 1. Standard Shadow
-    if (layer.hasShadow) {
-        const angleRad = (layer.shadowAngle * Math.PI) / 180;
-        const shadowDist = (layer.shadowOffset / 100) * fontSizePx;
-        const sX = shadowDist * Math.cos(angleRad);
-        const sY = shadowDist * Math.sin(angleRad);
-        const sBlur = (layer.shadowBlur / 100) * fontSizePx * 2;
-        const sColor = hexToRgba(layer.shadowColor, layer.shadowOpacity ?? 1);
-        shadows.push(`${sX}px ${sY}px ${sBlur}px ${sColor}`);
+const constructCanvasFont = (layer: TextLayer, fontSizePx: number): string => {
+    const fontFamily = `"${layer.fontFamily}"`;
+    let weight = layer.isBold ? 700 : 400;
+    if (layer.fontVariations && layer.fontVariations['wght'] !== undefined) {
+        weight = Math.round(layer.fontVariations['wght']);
     }
-
-    // 2. Echo Effect
-    if (layer.specialEffect === 'echo') {
-        const echoCount = 5;
-        const angleRad = (layer.effectAngle * Math.PI) / 180;
-        const distanceStep = layer.effectIntensity * (width * 0.0005); 
-        const baseAlpha = 0.5;
-
-        for (let i = 1; i <= echoCount; i++) {
-             const dx = Math.cos(angleRad) * distanceStep * i;
-             const dy = Math.sin(angleRad) * distanceStep * i;
-             // We use the text color but fade it out
-             const alpha = baseAlpha * (1 - i/echoCount);
-             shadows.push(`${dx}px ${dy}px 0px ${hexToRgba(layer.textColor, alpha)}`);
-        }
+    let stretch = "normal";
+    if (layer.fontVariations && layer.fontVariations['wdth'] !== undefined) {
+        const wVal = layer.fontVariations['wdth'];
+        if (wVal !== 100) stretch = `${Math.round(wVal)}%`;
     }
-
-    // Apply Text Shadows
-    if (shadows.length > 0) {
-        styles.textShadow = shadows.join(', ');
-    } else {
-        styles.textShadow = 'none';
+    let style = layer.isItalic ? 'italic' : 'normal';
+    if (layer.fontVariations && layer.fontVariations['slnt'] !== undefined) {
+        const slnt = layer.fontVariations['slnt'];
+        if (slnt !== 0) style = `oblique ${Math.abs(slnt)}deg`;
     }
-
-    // 3. Gradient Fill
-    if (layer.specialEffect === 'gradient' && !layer.isHollow) {
-        styles.backgroundImage = `linear-gradient(${layer.effectAngle}deg, ${layer.textColor}, ${layer.effectColor})`;
-        styles.backgroundClip = 'text';
-        styles.WebkitBackgroundClip = 'text';
-        styles.color = 'transparent';
-        styles.WebkitTextFillColor = 'transparent';
-    } else {
-        styles.color = layer.textColor;
-    }
-
-    // 4. Hollow / Outline
-    if (layer.isHollow) {
-        styles.color = 'transparent';
-        styles.WebkitTextFillColor = 'transparent';
-        styles.backgroundImage = 'none'; // Ensure no gradient on hollow
-        
-        styles.WebkitTextStroke = `${layer.hasOutline ? layer.outlineWidth : 2}px ${layer.hasOutline ? layer.outlineColor : layer.textColor}`;
-    } else if (layer.hasOutline) {
-        styles.WebkitTextStroke = `${layer.outlineWidth}px ${layer.outlineColor}`;
-    }
-
-    return styles;
+    return `${style} normal ${weight} ${stretch} ${fontSizePx}px/1 ${fontFamily}`;
 };
 
-// Helper: Calculate Path Character Positions
-const calculatePathLayout = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: number, height: number) => {
-    const fontSizePx = (layer.textSize / 100) * width;
+const getFontVariationSettings = (layer: TextLayer): string => {
+    if (!layer.fontVariations || Object.keys(layer.fontVariations).length === 0) {
+        return 'normal';
+    }
+    return Object.entries(layer.fontVariations)
+        .map(([key, val]) => `"${key}" ${val}`)
+        .join(', ');
+};
+
+// Helper: Generate Standard Text Layout (Local Coordinates)
+const calculateStandardLayout = (ctx: CanvasRenderingContext2D, layer: TextLayer, fontSizePx: number) => {
+    const text = layer.isUppercase ? layer.textOverlay.toUpperCase() : layer.textOverlay;
+    const lines = text.split('\n');
+    const lineHeight = fontSizePx; // line-height: 1
+    const scaledLetterSpacing = layer.letterSpacing * (fontSizePx / 50);
+    
+    const layout: { char: string, x: number, y: number, r: number }[] = [];
+    
+    // 1. Measure all lines to determine block dimensions
+    const lineMetrics = lines.map(line => {
+        let width = 0;
+        const chars = line.split('');
+        chars.forEach((char, i) => {
+             width += ctx.measureText(char).width;
+             if (i < chars.length - 1) width += scaledLetterSpacing;
+        });
+        return { line, width, chars };
+    });
+    
+    const totalHeight = lines.length * lineHeight;
+    const startY = -(totalHeight / 2) + (lineHeight / 2); // Center vertically around origin
+    const maxLineWidth = Math.max(...lineMetrics.map(m => m.width));
+    
+    lineMetrics.forEach((metric, lineIdx) => {
+        // Calculate X start for this line relative to the BLOCK CENTER
+        let lineX = 0;
+        
+        if (layer.textAlign === 'left') {
+            lineX = -maxLineWidth / 2;
+        } else if (layer.textAlign === 'center') {
+            lineX = -metric.width / 2;
+        } else if (layer.textAlign === 'right') {
+            lineX = maxLineWidth / 2 - metric.width;
+        }
+        
+        const lineY = startY + (lineIdx * lineHeight);
+        
+        let cursorX = lineX;
+        metric.chars.forEach(char => {
+             const w = ctx.measureText(char).width;
+             // Draw at center of char for accurate rotation
+             const charCenterX = cursorX + w / 2;
+             layout.push({
+                 char,
+                 x: charCenterX,
+                 y: lineY,
+                 r: layer.letterRotation
+             });
+             cursorX += w + scaledLetterSpacing;
+        });
+    });
+    
+    return layout;
+};
+
+// Helper: Calculate Path Character Positions (Absolute Coordinates)
+const calculatePathLayout = (ctx: CanvasRenderingContext2D, layer: TextLayer, fontSizePx: number) => {
     const scaledLetterSpacing = layer.letterSpacing * (fontSizePx/50);
     
     // 1. Get Path Points
@@ -172,12 +186,6 @@ const calculatePathLayout = (ctx: CanvasRenderingContext2D, layer: TextLayer, wi
     const singleLineText = text.replace(/\n/g, ' ');
 
     // 4. Measure Total Text Width
-    let fontWeight = layer.isBold ? 700 : 400;
-    if (layer.fontVariations?.['wght']) fontWeight = Math.round(layer.fontVariations['wght']);
-    let stretch = "normal";
-    if (layer.fontVariations?.['wdth']) stretch = `${Math.round(layer.fontVariations['wdth'])}%`;
-    ctx.font = `${layer.isItalic ? 'italic' : 'normal'} normal ${fontWeight} ${stretch} ${fontSizePx}px/1 "${layer.fontFamily}"`;
-
     let totalTextWidth = 0;
     const charWidths = singleLineText.split('').map(char => {
         const w = ctx.measureText(char).width;
@@ -218,7 +226,7 @@ const calculatePathLayout = (ctx: CanvasRenderingContext2D, layer: TextLayer, wi
                 char,
                 x: xBase,
                 y: yBase,
-                rotation: finalRotation
+                r: finalRotation
             });
         }
         currentDist += charW + scaledLetterSpacing;
@@ -226,218 +234,185 @@ const calculatePathLayout = (ctx: CanvasRenderingContext2D, layer: TextLayer, wi
     return layout;
 };
 
-
-const constructCanvasFont = (layer: TextLayer, width: number): string => {
-    const fontSize = (layer.textSize / 100) * width;
-    const fontFamily = `"${layer.fontFamily}"`;
-    let weight = layer.isBold ? 700 : 400;
-    if (layer.fontVariations && layer.fontVariations['wght'] !== undefined) {
-        weight = Math.round(layer.fontVariations['wght']);
-    }
-    let stretch = "normal";
-    if (layer.fontVariations && layer.fontVariations['wdth'] !== undefined) {
-        const wVal = layer.fontVariations['wdth'];
-        if (wVal !== 100) stretch = `${Math.round(wVal)}%`;
-    }
-    let style = layer.isItalic ? 'italic' : 'normal';
-    if (layer.fontVariations && layer.fontVariations['slnt'] !== undefined) {
-        const slnt = layer.fontVariations['slnt'];
-        if (slnt !== 0) style = `oblique ${Math.abs(slnt)}deg`;
-    }
-    return `${style} normal ${weight} ${stretch} ${fontSize}px/1 ${fontFamily}`;
-};
-
-const getFontVariationSettings = (layer: TextLayer): string => {
-    if (!layer.fontVariations || Object.keys(layer.fontVariations).length === 0) {
-        return 'normal';
-    }
-    return Object.entries(layer.fontVariations)
-        .map(([key, val]) => `"${key}" ${val}`)
-        .join(', ');
-};
-
-/**
- * Creates an SVG Data URL containing the text rendered with full CSS capabilities.
- * Supports both Standard and Path-based text, and Glitch reconstruction.
- */
-const createTextSVG = (layer: TextLayer, width: number, height: number, ctx: CanvasRenderingContext2D): string => {
+// --- Core Canvas Renderer ---
+const drawLayerToCtx = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: number, height: number) => {
     const fontSizePx = (layer.textSize / 100) * width;
-    const fontFamily = `"${layer.fontFamily}"`;
-    
-    const fontWeight = layer.fontVariations?.['wght'] ? Math.round(layer.fontVariations['wght']) : (layer.isBold ? 700 : 400);
-    let fontStyle = layer.isItalic ? 'italic' : 'normal';
-    if (layer.fontVariations?.['slnt']) fontStyle = `oblique ${Math.abs(layer.fontVariations['slnt'])}deg`;
-    
-    const variationSettings = getFontVariationSettings(layer);
-    
-    // Generate Styles (Effects, Shadows, Gradients)
-    const effectStyles = generateLayerStyles(layer, fontSizePx, width);
-    const hasTextShadow = !!effectStyles.textShadow && effectStyles.textShadow !== 'none';
-    
-    const styleObjToString = (styles: any) => Object.entries(styles).map(([k, v]) => {
-        const kebabKey = k.replace(/([A-Z])/g, '-$1').toLowerCase();
-        return `${kebabKey}: ${v};`;
-    }).join(' ');
+    ctx.font = constructCanvasFont(layer, fontSizePx);
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center';
 
-    const baseStyleString = styleObjToString(effectStyles);
+    const isPath = layer.pathPoints.length > 0;
+    
+    // 1. Calculate Layout (Chars with positions)
+    const layout = isPath 
+        ? calculatePathLayout(ctx, layer, fontSizePx)
+        : calculateStandardLayout(ctx, layer, fontSizePx);
+    
+    if (!layout || layout.length === 0) return;
 
-    // Common Text Generation Logic (Standard vs Path)
-    const generateContentHTML = (extraStyles: string = '') => {
-        if (layer.pathPoints.length > 0) {
-            const layout = calculatePathLayout(ctx, layer, width, height);
-            return layout.map(item => `
-                <div style="
-                    position: absolute;
-                    left: ${item.x}px;
-                    top: ${item.y}px;
-                    transform: translate(-50%, -50%) rotate(${item.rotation}deg);
-                    white-space: pre;
-                    ${extraStyles}
-                ">${item.char === ' ' ? '&nbsp;' : item.char}</div>
-            `).join('');
-        } else {
-            const text = layer.isUppercase ? layer.textOverlay.toUpperCase() : layer.textOverlay;
-            const lines = text.split('\n');
-            const innerContent = lines.map(line => {
-                const charSpans = line.split('').map(char => {
-                    const charDisplay = char === ' ' ? '&nbsp;' : char;
-                    const transform = layer.letterRotation !== 0 ? `transform: rotate(${layer.letterRotation}deg); display: inline-block;` : 'display: inline-block;';
-                    return `<span style="${transform}">${charDisplay}</span>`;
-                }).join('');
-                return `<div style="white-space: pre; display: block;">${charSpans}</div>`;
-            }).join('');
-            
-            return `
-                <div style="
-                    display: flex;
-                    flex-direction: column;
-                    align-items: ${layer.textAlign === 'center' ? 'center' : layer.textAlign === 'right' ? 'flex-end' : 'flex-start'};
-                    text-align: ${layer.textAlign};
-                    width: 100%;
-                    ${extraStyles}
-                ">
-                    ${innerContent}
-                </div>
-            `;
+    // Helper to draw the set of characters
+    const renderPass = (
+        color: string | CanvasGradient, 
+        offsetX: number, 
+        offsetY: number, 
+        blurPx: number, 
+        opacity: number, 
+        compositeOp: GlobalCompositeOperation, 
+        mode: 'fill' | 'stroke' | 'shadow-only'
+    ) => {
+        ctx.save();
+        
+        // Transform for Standard Layout (Rotate/Position Layer)
+        if (!isPath) {
+            const cx = (layer.overlayPosition.x / 100) * width;
+            const cy = (layer.overlayPosition.y / 100) * height;
+            ctx.translate(cx, cy);
+            ctx.rotate(layer.rotation * Math.PI / 180);
+            ctx.scale(layer.flipX ? -1 : 1, layer.flipY ? -1 : 1);
         }
+
+        // Apply visual properties
+        ctx.globalAlpha = opacity * layer.opacity; // Combine layer opacity with pass opacity
+        ctx.globalCompositeOperation = compositeOp;
+        
+        if (blurPx > 0) ctx.filter = `blur(${blurPx}px)`;
+        
+        if (mode === 'shadow-only') {
+             if (layer.hasShadow) {
+                 const angleRad = (layer.shadowAngle * Math.PI) / 180;
+                 const dist = (layer.shadowOffset / 100) * fontSizePx;
+                 const sX = dist * Math.cos(angleRad);
+                 const sY = dist * Math.sin(angleRad);
+                 ctx.shadowColor = hexToRgba(layer.shadowColor, layer.shadowOpacity ?? 1);
+                 ctx.shadowBlur = (layer.shadowBlur / 100) * fontSizePx * 2;
+                 ctx.shadowOffsetX = sX;
+                 ctx.shadowOffsetY = sY;
+                 // We draw transparent text to cast shadow
+                 ctx.fillStyle = 'rgba(0,0,0,0)'; 
+             } else {
+                 ctx.restore();
+                 return;
+             }
+        } else {
+             // Gradient Logic
+             if (layer.specialEffect === 'gradient' && !layer.isHollow && typeof color === 'string') {
+                 // Calculate Gradient Bounds relative to drawing context
+                 // For simplified gradient, we can just use the canvas dimensions or a fixed range relative to text
+                 const angleRad = (layer.effectAngle * Math.PI) / 180;
+                 // Create a gradient that spans roughly the text size. 
+                 // Simple approximation: -fontSize to +fontSize
+                 const range = fontSizePx * 5; 
+                 const x1 = Math.cos(angleRad) * -range;
+                 const y1 = Math.sin(angleRad) * -range;
+                 const x2 = Math.cos(angleRad) * range;
+                 const y2 = Math.sin(angleRad) * range;
+                 
+                 const grad = ctx.createLinearGradient(x1, y1, x2, y2);
+                 grad.addColorStop(0, layer.textColor);
+                 grad.addColorStop(1, layer.effectColor);
+                 ctx.fillStyle = grad;
+             } else {
+                 ctx.fillStyle = color;
+             }
+             
+             ctx.strokeStyle = layer.hasOutline ? layer.outlineColor : 'transparent';
+             ctx.lineWidth = layer.outlineWidth;
+        }
+
+        layout.forEach(item => {
+            ctx.save();
+            if (isPath) {
+                // Absolute positioning for Path
+                ctx.translate(item.x + offsetX, item.y + offsetY);
+                ctx.rotate(item.r * Math.PI / 180);
+                // No flip handling for path chars individually, assumes path flow
+            } else {
+                // Local positioning for Standard
+                ctx.translate(item.x + offsetX, item.y + offsetY);
+                ctx.rotate(item.r * Math.PI / 180);
+            }
+
+            if (mode === 'shadow-only') {
+                 ctx.fillText(item.char, 0, 0);
+            } else if (mode === 'stroke') {
+                 if (layer.hasOutline) ctx.strokeText(item.char, 0, 0);
+            } else {
+                 // Fill
+                 if (!layer.isHollow) {
+                     ctx.fillText(item.char, 0, 0);
+                 }
+                 // Outline (if not already handled, or if we want outline on top of fill)
+                 if (layer.hasOutline && layer.isHollow) {
+                      ctx.strokeText(item.char, 0, 0);
+                 } else if (layer.hasOutline) {
+                      // Optionally stroke after fill
+                      ctx.strokeText(item.char, 0, 0);
+                 }
+            }
+            ctx.restore();
+        });
+
+        ctx.restore();
     };
 
-    let innerHTML = '';
+    // --- Rendering Pipeline ---
 
-    // GLITCH LOGIC: Split into Shadow Pass, Clones, and Main Text
+    // 1. Echo Effect (Background Trails)
+    if (layer.specialEffect === 'echo') {
+        const echoCount = 5;
+        const angleRad = (layer.effectAngle * Math.PI) / 180;
+        const distanceStep = layer.effectIntensity * (width * 0.0005);
+        for (let i = echoCount; i >= 1; i--) {
+             const dx = Math.cos(angleRad) * distanceStep * i;
+             const dy = Math.sin(angleRad) * distanceStep * i;
+             const alpha = 0.5 * (1 - i/echoCount);
+             // Echo uses text color
+             renderPass(layer.textColor, dx, dy, 0, alpha, 'source-over', layer.isHollow ? 'stroke' : 'fill');
+        }
+    }
+
+    // 2. Shadow Pass
+    if (layer.hasShadow) {
+        renderPass('#000000', 0, 0, 0, 1, 'source-over', 'shadow-only');
+    }
+
+    // 3. Glitch Effects
     if (layer.specialEffect === 'glitch') {
-        const offsetBase = (layer.effectIntensity / 100) * (fontSizePx * 0.2); 
+        const offsetBase = (layer.effectIntensity / 100) * (fontSizePx * 0.2);
         const angleRad = (layer.effectAngle * Math.PI) / 180;
         
-        // 1. Shadow Pass (Bottom Layer)
-        // Renders only the shadow, with transparent text
-        if (hasTextShadow) {
-             const shadowStyle = `
-                color: transparent;
-                -webkit-text-fill-color: transparent;
-                -webkit-text-stroke: 0px transparent;
-                background-image: none;
-                mix-blend-mode: normal; 
-             `;
-             // Reuse baseStyleString but override to make text transparent
-             innerHTML += `<div style="position: absolute; width: 100%; height: 100%; top: 0; left: 0; pointer-events: none;">${generateContentHTML(shadowStyle)}</div>`;
-        }
-
-        // 2. Clones (Middle Layers)
-        // Renders the glitch colors, NO shadow, Blending depends on lights toggle
-        // FIX: Always use screen for Standard Glitch, use toggle for Rainbow Glitch
-        const cloneResetStyle = `
-            text-shadow: none;
-            -webkit-text-stroke: 0px transparent;
-            -webkit-text-fill-color: currentColor;
-            background-image: none;
-            mix-blend-mode: ${(!layer.isRainbowGlitch || layer.isRainbowLights) ? 'screen' : 'normal'}; 
-        `;
-
-        const createClone = (color: string, offsetX: number, offsetY: number, opacity: number, blur: number) => {
-            return `<div style="position: absolute; left: 0; top: 0; width: 100%; height: 100%; transform: translate(${offsetX}px, ${offsetY}px); color: ${color}; opacity: ${opacity}; filter: blur(${blur}px); pointer-events: none; ${cloneResetStyle}">${generateContentHTML()}</div>`;
-        };
+        // Determine Blend Mode for Glitch Channels
+        // Rainbow mode with Lights on = Screen. 
+        // Standard Glitch = Always Screen (red/blue mix to magenta).
+        const glitchBlend = (!layer.isRainbowGlitch || layer.isRainbowLights) ? 'screen' : 'source-over';
 
         if (layer.isRainbowGlitch) {
-            // Updated Rainbow Colors: Red, Orange, Yellow, Green, Cyan, Blue, Violet, Indigo (Last)
-            const rainbowColors = ['#ff0000', '#ffa500', '#ffff00', '#00ff00', '#00ffff', '#0000ff', '#8f00ff', '#4b0082'];
-            const spreadFactor = 3.0; // Doubled spread from 1.5
-            rainbowColors.forEach((color, i) => {
-                const indexOffset = i - (rainbowColors.length - 1) / 2; 
+             const rainbowColors = ['#ff0000', '#ffa500', '#ffff00', '#00ff00', '#00ffff', '#0000ff', '#8f00ff', '#4b0082'];
+             const spreadFactor = 3.0;
+             rainbowColors.forEach((color, i) => {
+                const indexOffset = i - (rainbowColors.length - 1) / 2;
                 const dist = (indexOffset * offsetBase * spreadFactor) / 2;
                 const dx = Math.cos(angleRad) * dist;
                 const dy = Math.sin(angleRad) * dist;
-                innerHTML += createClone(color, dx, dy, layer.rainbowOpacity, layer.rainbowBlur);
-            });
+                renderPass(color, dx, dy, layer.rainbowBlur, layer.rainbowOpacity, glitchBlend, 'fill');
+             });
         } else {
-            const dx = Math.cos(angleRad) * offsetBase;
-            const dy = Math.sin(angleRad) * offsetBase;
-            innerHTML += createClone(layer.effectColor, -dx, -dy, 1, 1);
-            innerHTML += createClone(layer.effectColor2, dx, dy, 1, 1);
+             // Standard 2-channel glitch
+             const dx = Math.cos(angleRad) * offsetBase;
+             const dy = Math.sin(angleRad) * offsetBase;
+             renderPass(layer.effectColor, -dx, -dy, 1, 1, glitchBlend, 'fill');
+             renderPass(layer.effectColor2, dx, dy, 1, 1, glitchBlend, 'fill');
         }
-        
-        // 3. Main Text (Top Layer)
-        // Renders text/gradient/outline, NO shadow
-        const mainStyleNoShadow = `text-shadow: none;`;
-        innerHTML += `<div style="position: relative; width: 100%; height: 100%;">${generateContentHTML(mainStyleNoShadow)}</div>`;
-
-    } else {
-        // Standard Render (Shadow, Text, etc all in one)
-        innerHTML = generateContentHTML();
     }
 
-    // Positioning Wrapper Logic
-    let wrapperStyle = '';
-    if (layer.pathPoints.length > 0) {
-        wrapperStyle = `width: 100%; height: 100%; position: absolute; left: 0; top: 0;`;
-    } else {
-        const xPct = layer.overlayPosition.x;
-        const yPct = layer.overlayPosition.y;
-        wrapperStyle = `
-            position: absolute;
-            left: ${xPct}%;
-            top: ${yPct}%;
-            transform: translate(-50%, -50%) rotate(${layer.rotation}deg) scale(${layer.flipX ? -1 : 1}, ${layer.flipY ? -1 : 1});
-            transform-origin: center center;
-            width: 100%;
-        `;
-    }
-
-    const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-        <foreignObject width="100%" height="100%">
-            <div xmlns="http://www.w3.org/1999/xhtml" style="
-                width: 100%;
-                height: 100%;
-                position: relative;
-                overflow: visible;
-                background: transparent;
-                font-family: ${fontFamily};
-                font-size: ${fontSizePx}px;
-                font-weight: ${fontWeight};
-                font-style: ${fontStyle};
-                font-variation-settings: ${variationSettings};
-                line-height: 1;
-                letter-spacing: ${layer.letterSpacing * (fontSizePx/50)}px;
-                font-synthesis: none;
-                -webkit-font-smoothing: antialiased;
-                -moz-osx-font-smoothing: grayscale;
-                mix-blend-mode: ${layer.blendMode};
-                ${baseStyleString}
-            ">
-                <div style="${wrapperStyle}">
-                    ${innerHTML}
-                </div>
-            </div>
-        </foreignObject>
-    </svg>
-    `;
-    
-    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    // 4. Main Text Pass
+    // Drawn on top. 
+    // If standard glitch, main text is usually drawn 'source-over' or 'screen' depending on look?
+    // Standard glitch usually puts white text on top of red/blue.
+    renderPass(layer.textColor, 0, 0, 0, 1, 'source-over', layer.isHollow ? 'stroke' : 'fill');
 };
 
-
-// Helper: Get text metrics (Tight Ink Bounds)
+// Helper: Get text metrics (Tight Ink Bounds) for Gizmo
 const measureLineMetrics = (ctx: CanvasRenderingContext2D, text: string, letterSpacing: number) => {
     const chars = text.split('');
     let currentX = 0;
@@ -467,7 +442,7 @@ const measureLineMetrics = (ctx: CanvasRenderingContext2D, text: string, letterS
 
 const measureTextLayout = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: number) => {
     const fontSize = (layer.textSize / 100) * width;
-    ctx.font = constructCanvasFont(layer, width);
+    ctx.font = constructCanvasFont(layer, fontSize);
     
     const scaledLetterSpacing = layer.letterSpacing * (fontSize / 50);
     const rawText = layer.isUppercase ? layer.textOverlay.toUpperCase() : layer.textOverlay;
@@ -827,7 +802,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
 
       // 1. Render Background
       const bgImg = overrideBgImage || bgImageRef.current;
-      bufferCtx.clearRect(0, 0, width, height);
+      if (shouldClear) bufferCtx.clearRect(0, 0, width, height);
       if (bgImg) {
           bufferCtx.drawImage(bgImg, 0, 0, width, height);
       }
@@ -842,42 +817,21 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
 
           scratchCtx.clearRect(0, 0, width, height);
           
-          // In Preview mode, the DOM Overlay handles all text rendering (Standard + Path)
-          // except for the actual interactive drawing of the pink path line.
-          // This ensures perfect WYSIWYG between editing and export.
+          // In Preview mode, the DOM Overlay handles all text rendering.
+          // Unless forceUseCanvas is true (e.g., Stamping/Exporting), we skip drawing text here.
           if (isPreview && !forceUseCanvas) {
-              // Skip visual rendering here, let DOM handle it.
+              // No-op for visual text
           } else {
-              // EXPORT MODE or Fallback
-              // Always try to use SVG Renderer first because it supports Variable Fonts and Effects best.
-              const svgData = createTextSVG(layer, width, height, scratchCtx); // Pass scratchCtx for measuring path text
-              
-              const img = new Image();
-              const loadPromise = new Promise<boolean>((resolve) => {
-                  img.onload = () => resolve(true);
-                  img.onerror = () => resolve(false);
-                  img.src = svgData;
-              });
-
-              // Race timeout
-              const timeoutPromise = new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 500));
-              const isLoaded = await Promise.race([loadPromise, timeoutPromise]);
-              
-              if (isLoaded) {
-                  scratchCtx.drawImage(img, 0, 0);
-              } else {
-                  console.warn("SVG Render failed for layer", layer.id);
-              }
+              // EXPORT MODE or FALLBACK: Use Native Canvas Renderer
+              await document.fonts.ready; // Ensure fonts are ready before drawing
+              drawLayerToCtx(scratchCtx, layer, width, height);
           }
 
           // Composite Scratch to Buffer
           bufferCtx.save();
           bufferCtx.setTransform(1, 0, 0, 1, 0, 0); 
           
-          // Blend Mode Logic for Export
-          // Note: SVG foreignObject handles mix-blend-mode internally for the text elements (glitch, etc)
-          // But to blend the entire layer with the background, we use Canvas composite operations.
-          bufferCtx.globalAlpha = layer.opacity;
+          bufferCtx.globalAlpha = 1; // opacity handled inside drawLayerToCtx for visual fidelity in layers
           
           const gcoMap: Record<string, GlobalCompositeOperation> = {
               'normal': 'source-over',
@@ -993,7 +947,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
   }), [generateExport, stampLayers]);
 
   // --- DOM Overlay Renderer ---
-  // Now handles BOTH Standard and Path text to ensure Variable Font + Effects support
+  // (Maintains current DOM logic for Preview, which is good for WYSIWYG editing)
   const renderTextLayersOverlay = () => {
       if (!imgDims) return null;
 
@@ -1029,8 +983,29 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                   }
 
                   // Generate Advanced CSS Styles (Gradients, Echo, etc.)
-                  const effectStyles = generateLayerStyles(layer, fontSizePx, imgDims.w);
-                  const hasTextShadow = !!effectStyles.textShadow && effectStyles.textShadow !== 'none';
+                  // We duplicate logic here for preview vs canvas export, but that is necessary for 
+                  // React interactive preview vs static canvas burn-in.
+                  const shadows: string[] = [];
+                   if (layer.hasShadow) {
+                        const angleRad = (layer.shadowAngle * Math.PI) / 180;
+                        const shadowDist = (layer.shadowOffset / 100) * fontSizePx;
+                        const sX = shadowDist * Math.cos(angleRad);
+                        const sY = shadowDist * Math.sin(angleRad);
+                        const sBlur = (layer.shadowBlur / 100) * fontSizePx * 2;
+                        const sColor = hexToRgba(layer.shadowColor, layer.shadowOpacity ?? 1);
+                        shadows.push(`${sX}px ${sY}px ${sBlur}px ${sColor}`);
+                    }
+                    if (layer.specialEffect === 'echo') {
+                        const echoCount = 5;
+                        const angleRad = (layer.effectAngle * Math.PI) / 180;
+                        const distanceStep = layer.effectIntensity * (imgDims.w * 0.0005); 
+                        for (let i = 1; i <= echoCount; i++) {
+                            const dx = Math.cos(angleRad) * distanceStep * i;
+                            const dy = Math.sin(angleRad) * distanceStep * i;
+                            const alpha = 0.5 * (1 - i/echoCount);
+                            shadows.push(`${dx}px ${dy}px 0px ${hexToRgba(layer.textColor, alpha)}`);
+                        }
+                    }
 
                   // Base container style
                   const baseStyle: React.CSSProperties = {
@@ -1048,7 +1023,17 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                       opacity: layer.opacity,
                       mixBlendMode: layer.blendMode === 'normal' ? 'normal' : layer.blendMode as any,
                       zIndex: design.layers.findIndex(l => l.id === layer.id) * 10,
-                      ...effectStyles // Apply generated effects
+                      textShadow: shadows.join(', ') || 'none',
+                      color: layer.specialEffect === 'gradient' && !layer.isHollow ? 'transparent' : layer.textColor,
+                      backgroundImage: layer.specialEffect === 'gradient' && !layer.isHollow 
+                            ? `linear-gradient(${layer.effectAngle}deg, ${layer.textColor}, ${layer.effectColor})` 
+                            : 'none',
+                      backgroundClip: layer.specialEffect === 'gradient' && !layer.isHollow ? 'text' : 'border-box',
+                      WebkitBackgroundClip: layer.specialEffect === 'gradient' && !layer.isHollow ? 'text' : 'border-box',
+                      WebkitTextFillColor: layer.specialEffect === 'gradient' && !layer.isHollow ? 'transparent' : (layer.isHollow ? 'transparent' : 'currentColor'),
+                      WebkitTextStroke: (layer.isHollow || layer.hasOutline) 
+                            ? `${layer.hasOutline ? layer.outlineWidth : 2}px ${layer.hasOutline ? layer.outlineColor : layer.textColor}` 
+                            : 'none'
                   };
 
                   // --- CONTENT RENDERER ---
@@ -1057,7 +1042,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                       if (layer.pathPoints.length > 0) {
                           const ctx = textCanvasRef.current?.getContext('2d');
                           if (!ctx) return null;
-                          const layout = calculatePathLayout(ctx, layer, imgDims.w, imgDims.h);
+                          const layout = calculatePathLayout(ctx, layer, fontSizePx);
                           
                           return (
                               <div style={{ ...baseStyle, width: '100%', height: '100%', left: 0, top: 0, ...extraStyle }}>
@@ -1068,7 +1053,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                                             position: 'absolute',
                                             left: `${item.x}px`,
                                             top: `${item.y}px`,
-                                            transform: `translate(-50%, -50%) rotate(${item.rotation}deg)`,
+                                            transform: `translate(-50%, -50%) rotate(${item.r}deg)`,
                                             whiteSpace: 'pre'
                                         }}
                                       >
@@ -1209,7 +1194,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                       return (
                           <React.Fragment key={layer.id}>
                                 {/* 1. Shadow Pass (Bottom) */}
-                                {hasTextShadow && renderContent({
+                                {layer.hasShadow && renderContent({
                                     color: 'transparent',
                                     WebkitTextFillColor: 'transparent',
                                     WebkitTextStroke: '0px transparent',
