@@ -351,6 +351,7 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
         effectColor: '#FF0000',
         effectColor2: '#00FFFF',
         isRainbowGlitch: false,
+        isRainbowLights: false,
         rainbowOpacity: 1.0,
         rainbowBlur: 0,
         effectAngle: 90,

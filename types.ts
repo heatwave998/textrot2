@@ -176,6 +176,7 @@ export interface TextLayer {
   effectColor: string; // Primary Effect Color (Glitch Left / Gradient End)
   effectColor2: string; // Secondary Effect Color (Glitch Right)
   isRainbowGlitch: boolean; // Toggle for Rainbow Glitch
+  isRainbowLights: boolean; // Toggle for 'screen' blending mode vs 'normal' in Rainbow Glitch
   rainbowOpacity: number; // 0-1 for rainbow layer opacity
   rainbowBlur: number; // Blur amount for rainbow layers
   effectAngle: number; // 0-360 for Gradient Angle and Echo Direction

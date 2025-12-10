@@ -1,6 +1,8 @@
 
 
 
+
+
 import React, { useState, useRef, useEffect } from 'react';
 import Canvas, { CanvasHandle } from './components/Canvas';
 import Controls, { ControlsHandle } from './components/Controls';
@@ -60,6 +62,7 @@ const createLayer = (id: string, text: string = 'EDIT ME'): TextLayer => ({
   effectColor: '#FF0000',
   effectColor2: '#00FFFF',
   isRainbowGlitch: false,
+  isRainbowLights: false, // Default to normal blending
   rainbowOpacity: 1.0,
   rainbowBlur: 0,
   effectAngle: 90,

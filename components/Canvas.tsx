@@ -1,4 +1,3 @@
-
 import React, { useRef, useState, forwardRef, useImperativeHandle, useEffect, useCallback, useLayoutEffect } from 'react';
 import { DesignState, Point, TextLayer } from '../types';
 import { Upload, Maximize2, PenTool, RotateCw, Move as MoveIcon } from 'lucide-react';
@@ -345,13 +344,14 @@ const createTextSVG = (layer: TextLayer, width: number, height: number, ctx: Can
         }
 
         // 2. Clones (Middle Layers)
-        // Renders the glitch colors, NO shadow, Screen blending
+        // Renders the glitch colors, NO shadow, Blending depends on lights toggle
+        // FIX: Always use screen for Standard Glitch, use toggle for Rainbow Glitch
         const cloneResetStyle = `
             text-shadow: none;
             -webkit-text-stroke: 0px transparent;
             -webkit-text-fill-color: currentColor;
             background-image: none;
-            mix-blend-mode: screen; 
+            mix-blend-mode: ${(!layer.isRainbowGlitch || layer.isRainbowLights) ? 'screen' : 'normal'}; 
         `;
 
         const createClone = (color: string, offsetX: number, offsetY: number, opacity: number, blur: number) => {
@@ -359,9 +359,9 @@ const createTextSVG = (layer: TextLayer, width: number, height: number, ctx: Can
         };
 
         if (layer.isRainbowGlitch) {
-            // Updated Rainbow Colors including Orange, Indigo, Violet
-            const rainbowColors = ['#ff0000', '#ffa500', '#ffff00', '#00ff00', '#00ffff', '#0000ff', '#4b0082', '#8f00ff'];
-            const spreadFactor = 1.5; 
+            // Updated Rainbow Colors: Red, Orange, Yellow, Green, Cyan, Blue, Violet, Indigo (Last)
+            const rainbowColors = ['#ff0000', '#ffa500', '#ffff00', '#00ff00', '#00ffff', '#0000ff', '#8f00ff', '#4b0082'];
+            const spreadFactor = 3.0; // Doubled spread from 1.5
             rainbowColors.forEach((color, i) => {
                 const indexOffset = i - (rainbowColors.length - 1) / 2; 
                 const dist = (indexOffset * offsetBase * spreadFactor) / 2;
@@ -1128,7 +1128,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                           WebkitTextStroke: '0px transparent', // Explicitly remove outline
                           WebkitTextFillColor: 'currentColor', // Force fill to current color
                           backgroundImage: 'none', // Remove gradient
-                          mixBlendMode: 'screen' as any // Use Screen for additive blending
+                          mixBlendMode: (!layer.isRainbowGlitch || layer.isRainbowLights) ? 'screen' as const : 'normal' as const
                       };
 
                       // Styles for Main Text when Glitching
@@ -1138,9 +1138,9 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
 
                       const renderClones = () => {
                         if (layer.isRainbowGlitch) {
-                            // Updated Rainbow Colors including Orange, Indigo, Violet
-                            const rainbowColors = ['#ff0000', '#ffa500', '#ffff00', '#00ff00', '#00ffff', '#0000ff', '#4b0082', '#8f00ff'];
-                            const spreadFactor = 1.5; 
+                            // Updated Rainbow Colors: Red, Orange, Yellow, Green, Cyan, Blue, Violet, Indigo (Last)
+                            const rainbowColors = ['#ff0000', '#ffa500', '#ffff00', '#00ff00', '#00ffff', '#0000ff', '#8f00ff', '#4b0082'];
+                            const spreadFactor = 3.0; // Doubled spread from 1.5
                             
                             return (
                                 <>

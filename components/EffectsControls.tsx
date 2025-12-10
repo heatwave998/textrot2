@@ -1,7 +1,9 @@
 
+
+
 import React from 'react';
 import { DesignState, TextLayer } from '../types';
-import { CircleDashed, Square, Ban, Compass } from 'lucide-react';
+import { CircleDashed, Square, Ban, Compass, Lightbulb } from 'lucide-react';
 import SliderControl from './SliderControl';
 import CollapsibleSection from './CollapsibleSection';
 
@@ -112,12 +114,23 @@ const EffectsControls: React.FC<EffectsControlsProps> = ({ design, update, toggl
                     }`}>
                         Rainbow Mode
                     </label>
-                    <button 
-                        onClick={() => toggle('isRainbowGlitch')}
-                        className={`text-xs px-2 py-1 rounded-[3px] border ${activeLayer.isRainbowGlitch ? 'bg-neutral-800 border-pink-500 text-pink-500' : 'border-neutral-800 text-neutral-500'}`}
-                    >
-                        {activeLayer.isRainbowGlitch ? 'ON' : 'OFF'}
-                    </button>
+                    <div className="flex gap-2">
+                        {activeLayer.isRainbowGlitch && (
+                            <button
+                                onClick={() => toggle('isRainbowLights')}
+                                className={`text-xs px-2 py-1 rounded-[3px] border flex items-center gap-1 ${activeLayer.isRainbowLights ? 'bg-neutral-800 border-yellow-500 text-yellow-500' : 'border-neutral-800 text-neutral-500'}`}
+                                title="Additive Blending (Lights)"
+                            >
+                                <Lightbulb size={10} />
+                            </button>
+                        )}
+                        <button 
+                            onClick={() => toggle('isRainbowGlitch')}
+                            className={`text-xs px-2 py-1 rounded-[3px] border ${activeLayer.isRainbowGlitch ? 'bg-neutral-800 border-pink-500 text-pink-500' : 'border-neutral-800 text-neutral-500'}`}
+                        >
+                            {activeLayer.isRainbowGlitch ? 'ON' : 'OFF'}
+                        </button>
+                    </div>
                 </div>
             )}
 
@@ -168,7 +181,7 @@ const EffectsControls: React.FC<EffectsControlsProps> = ({ design, update, toggl
                         label="Rainbow Blur" 
                         value={activeLayer.rainbowBlur}
                         setValue={(v: number) => update('rainbowBlur', v)}
-                        min="0" max="50" step="1"
+                        min="0" max="30" step="1"
                         suffix="px"
                         defaultValue={0}
                     />
