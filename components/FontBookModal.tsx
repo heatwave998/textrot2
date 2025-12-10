@@ -1,8 +1,8 @@
 
 import React, { useState, useMemo } from 'react';
-import { X, Search, Type } from 'lucide-react';
+import { X, Search, Type, Sliders } from 'lucide-react';
 import { FontFamily } from '../types';
-import { FONTS, FONT_CATEGORIES, getFontCategory } from '../constants';
+import { FONTS, FONT_CATEGORIES, getFontCategory, VARIABLE_FONTS } from '../constants';
 
 interface FontBookModalProps {
   isOpen: boolean;
@@ -97,7 +97,12 @@ const FontBookModal: React.FC<FontBookModalProps> = ({
         {/* Font Grid */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6 custom-scrollbar bg-neutral-900">
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                {filteredFonts.map(font => (
+                {filteredFonts.map(font => {
+                    const varConfig = VARIABLE_FONTS[font];
+                    const extraAxes = varConfig?.axes.filter(a => a.tag !== 'wght') || [];
+                    const hasVariable = !!varConfig;
+
+                    return (
                     <button
                         key={font}
                         onClick={() => { onSelect(font); onClose(); }}
@@ -110,7 +115,7 @@ const FontBookModal: React.FC<FontBookModalProps> = ({
                         `}
                     >
                         {/* Preview Area */}
-                        <div className="flex-1 flex items-center justify-center p-4 w-full overflow-hidden">
+                        <div className="flex-1 flex items-center justify-center p-4 w-full overflow-hidden relative">
                             <span 
                                 style={{ fontFamily: font }} 
                                 className="text-4xl md:text-5xl text-white group-hover:scale-110 transition-transform duration-300"
@@ -120,12 +125,28 @@ const FontBookModal: React.FC<FontBookModalProps> = ({
                         </div>
                         
                         {/* Footer */}
-                        <div className="h-10 border-t border-neutral-800/50 bg-neutral-950/50 flex items-center justify-between px-3 w-full shrink-0">
-                            <span className="text-xs text-neutral-400 font-medium truncate pr-2">{font}</span>
+                        <div className="h-10 border-t border-neutral-800/50 bg-neutral-950/50 flex items-center px-3 w-full shrink-0 gap-2">
+                            <span className="text-xs text-neutral-400 font-medium truncate flex-1 text-left">{font}</span>
+                            
+                            {/* Variable Font Indicator */}
+                            {hasVariable && (
+                                <div 
+                                    className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded-[3px] border ${extraAxes.length > 0 ? 'bg-neutral-900 border-neutral-800' : 'bg-transparent border-transparent'}`}
+                                    title={extraAxes.length > 0 ? `Extra Axes: ${extraAxes.map(a => a.name).join(', ')}` : "Variable Weight Supported"}
+                                >
+                                    {extraAxes.length > 0 && (
+                                        <span className="text-[8px] text-neutral-500 font-mono uppercase tracking-tight hidden sm:inline-block">
+                                            {extraAxes.map(a => a.tag).join(' ')}
+                                        </span>
+                                    )}
+                                    <Sliders size={10} className={extraAxes.length > 0 ? "text-pink-500" : "text-neutral-600"} />
+                                </div>
+                            )}
+
                             {currentFont === font && <div className="w-1.5 h-1.5 rounded-full bg-pink-500 shrink-0" />}
                         </div>
                     </button>
-                ))}
+                )})}
                 
                 {filteredFonts.length === 0 && (
                     <div className="col-span-full py-12 text-center text-neutral-500">

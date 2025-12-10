@@ -794,6 +794,18 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
                 <button onClick={() => toggleLayer('isUppercase')} className={`flex-1 h-10 rounded-[3px] hover:bg-neutral-800 flex items-center justify-center ${activeLayer.isUppercase ? 'bg-neutral-800 text-pink-500' : 'text-neutral-400'}`}><CaseUpper size={28} /></button>
             </div>
 
+            <div className="flex gap-2">
+                  <div className="flex-1 flex gap-1 bg-neutral-950 rounded-[3px] p-1 border border-neutral-800">
+                      <button onClick={() => updateLayer('textAlign', 'left')} className={`flex-1 h-8 rounded-[3px] flex items-center justify-center ${activeLayer.textAlign === 'left' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:text-white'}`}><AlignLeft size={16} /></button>
+                      <button onClick={() => updateLayer('textAlign', 'center')} className={`flex-1 h-8 rounded-[3px] flex items-center justify-center ${activeLayer.textAlign === 'center' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:text-white'}`}><AlignCenter size={16} /></button>
+                      <button onClick={() => updateLayer('textAlign', 'right')} className={`flex-1 h-8 rounded-[3px] flex items-center justify-center ${activeLayer.textAlign === 'right' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:text-white'}`}><AlignRight size={16} /></button>
+                  </div>
+                  <div className="flex gap-1 bg-neutral-950 rounded-[3px] p-1 border border-neutral-800">
+                      <button onClick={() => toggleLayer('flipX')} className={`h-8 w-8 rounded-[3px] hover:bg-neutral-800 flex items-center justify-center ${activeLayer.flipX ? 'bg-neutral-800 text-pink-500' : 'text-neutral-400'}`}><FlipHorizontal size={16} /></button>
+                      <button onClick={() => toggleLayer('flipY')} className={`h-8 w-8 rounded-[3px] hover:bg-neutral-800 flex items-center justify-center ${activeLayer.flipY ? 'bg-neutral-800 text-pink-500' : 'text-neutral-400'}`}><FlipVertical size={16} /></button>
+                  </div>
+            </div>
+
             {/* Variable Font Sliders & Toggles */}
             {variableConfig && variableConfig.axes.length > 0 && (
                  <div className="mb-3 space-y-2 bg-neutral-950 border border-neutral-800 p-2 rounded-[3px] animate-in slide-in-from-top-1 fade-in">
@@ -842,18 +854,6 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
                     })}
                  </div>
             )}
-
-            <div className="flex gap-2">
-                  <div className="flex-1 flex gap-1 bg-neutral-950 rounded-[3px] p-1 border border-neutral-800">
-                      <button onClick={() => updateLayer('textAlign', 'left')} className={`flex-1 h-8 rounded-[3px] flex items-center justify-center ${activeLayer.textAlign === 'left' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:text-white'}`}><AlignLeft size={16} /></button>
-                      <button onClick={() => updateLayer('textAlign', 'center')} className={`flex-1 h-8 rounded-[3px] flex items-center justify-center ${activeLayer.textAlign === 'center' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:text-white'}`}><AlignCenter size={16} /></button>
-                      <button onClick={() => updateLayer('textAlign', 'right')} className={`flex-1 h-8 rounded-[3px] flex items-center justify-center ${activeLayer.textAlign === 'right' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:text-white'}`}><AlignRight size={16} /></button>
-                  </div>
-                  <div className="flex gap-1 bg-neutral-950 rounded-[3px] p-1 border border-neutral-800">
-                      <button onClick={() => toggleLayer('flipX')} className={`h-8 w-8 rounded-[3px] hover:bg-neutral-800 flex items-center justify-center ${activeLayer.flipX ? 'bg-neutral-800 text-pink-500' : 'text-neutral-400'}`}><FlipHorizontal size={16} /></button>
-                      <button onClick={() => toggleLayer('flipY')} className={`h-8 w-8 rounded-[3px] hover:bg-neutral-800 flex items-center justify-center ${activeLayer.flipY ? 'bg-neutral-800 text-pink-500' : 'text-neutral-400'}`}><FlipVertical size={16} /></button>
-                  </div>
-            </div>
 
             <SliderControl label="Kerning" icon={AlignCenterHorizontal} value={activeLayer.letterSpacing} setValue={(v) => updateLayer('letterSpacing', v)} min="-20" max="100" step="1" suffix="px" defaultValue={0} />
             <SliderControl label="Letter Rotate" icon={RotateCw} value={activeLayer.letterRotation} setValue={(v) => updateLayer('letterRotation', v)} min="-180" max="180" step="1" suffix="°" defaultValue={0} />
