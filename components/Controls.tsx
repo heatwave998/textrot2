@@ -1,6 +1,4 @@
 
-
-
 import React, { useState, useCallback, useMemo, forwardRef, useImperativeHandle, useRef } from 'react';
 import { DesignState, FontFamily, AspectRatio, TextLayer, AppSettings, GenModel, ImageResolution } from '../types';
 import { 
@@ -11,7 +9,7 @@ import {
   AlignLeft, AlignCenter, AlignRight, Move, Activity,
   Maximize, MoveHorizontal, MoveVertical, Undo2, Redo2, ToggleRight, ToggleLeft, Paintbrush,
   Plus, Eye, EyeOff, ChevronUp, ChevronDown, Wand2, BoxSelect, BookType, Link as LinkIcon, Stamp,
-  Sliders
+  Sliders, ToggleLeft as ToggleOff, ToggleRight as ToggleOn
 } from 'lucide-react';
 import SliderControl from './SliderControl';
 import EffectsControls from './EffectsControls';
@@ -795,24 +793,52 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
                 <button onClick={() => toggleLayer('isUppercase')} className={`flex-1 h-10 rounded-[3px] hover:bg-neutral-800 flex items-center justify-center ${activeLayer.isUppercase ? 'bg-neutral-800 text-pink-500' : 'text-neutral-400'}`}><CaseUpper size={28} /></button>
             </div>
 
-            {/* Variable Font Sliders */}
+            {/* Variable Font Sliders & Toggles */}
             {variableConfig && variableConfig.axes.length > 0 && (
                  <div className="mb-3 space-y-2 bg-neutral-950 border border-neutral-800 p-2 rounded-[3px] animate-in slide-in-from-top-1 fade-in">
                     <div className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider mb-1 flex items-center gap-1">
                         <Sliders size={10} /> Variable Axes
                     </div>
-                    {variableConfig.axes.map(axis => (
-                        <SliderControl 
-                            key={axis.tag}
-                            label={axis.name}
-                            value={activeLayer.fontVariations?.[axis.tag] ?? axis.defaultValue}
-                            setValue={(v) => updateFontVariation(axis.tag, v)}
-                            min={axis.min}
-                            max={axis.max}
-                            step={axis.step}
-                            defaultValue={axis.defaultValue}
-                        />
-                    ))}
+                    {variableConfig.axes.map(axis => {
+                        const currentValue = activeLayer.fontVariations?.[axis.tag] ?? axis.defaultValue;
+                        
+                        // Check if axis is a toggle
+                        if (axis.inputType === 'toggle') {
+                            const isToggled = currentValue === 1;
+                            return (
+                                <div key={axis.tag} className="flex items-center justify-between h-8">
+                                    <label className="text-[10px] text-neutral-500 flex items-center gap-1.5">
+                                        {axis.name}
+                                    </label>
+                                    <button
+                                        onClick={() => updateFontVariation(axis.tag, isToggled ? 0 : 1)}
+                                        className={`flex items-center gap-1 px-2 py-1 rounded-[3px] border transition-colors ${
+                                            isToggled 
+                                            ? 'bg-neutral-800 border-pink-500 text-pink-500' 
+                                            : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:text-white'
+                                        }`}
+                                    >
+                                        {isToggled ? <ToggleOn size={16} /> : <ToggleOff size={16} />}
+                                        <span className="text-[10px] font-bold">{isToggled ? 'ON' : 'OFF'}</span>
+                                    </button>
+                                </div>
+                            );
+                        }
+
+                        // Default to Slider
+                        return (
+                            <SliderControl 
+                                key={axis.tag}
+                                label={axis.name}
+                                value={currentValue}
+                                setValue={(v) => updateFontVariation(axis.tag, v)}
+                                min={axis.min}
+                                max={axis.max}
+                                step={axis.step}
+                                defaultValue={axis.defaultValue}
+                            />
+                        );
+                    })}
                  </div>
             )}
 

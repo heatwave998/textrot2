@@ -1,5 +1,4 @@
 
-
 import { FontFamily } from './types';
 
 export const FONT_CATEGORIES = {
@@ -30,6 +29,7 @@ export interface FontAxis {
   max: number;
   defaultValue: number;
   step: number;
+  inputType?: 'slider' | 'toggle'; // New: Control the UI presentation
 }
 
 export interface VariableFontConfig {
@@ -51,7 +51,8 @@ export const VARIABLE_FONTS: Partial<Record<FontFamily, VariableFontConfig>> = {
       { tag: 'wght', name: 'Weight', min: 100, max: 900, defaultValue: 400, step: 10 },
       { tag: 'opsz', name: 'Optical Size', min: 9, max: 144, defaultValue: 12, step: 0.1 },
       { tag: 'SOFT', name: 'Softness', min: 0, max: 100, defaultValue: 0, step: 1 },
-      { tag: 'WONK', name: 'Wonkiness', min: 0, max: 1, defaultValue: 0, step: 0.01 }
+      // Change WONK to a toggle with step 1 (0 or 1)
+      { tag: 'WONK', name: 'Wonkiness', min: 0, max: 1, defaultValue: 0, step: 1, inputType: 'toggle' }
     ]
   },
   'Inter': {

@@ -1,7 +1,5 @@
 
-
-
-import React, { useRef, useState, forwardRef, useImperativeHandle, useEffect, useCallback } from 'react';
+import React, { useRef, useState, forwardRef, useImperativeHandle, useEffect, useCallback, useLayoutEffect } from 'react';
 import { DesignState, Point, TextLayer } from '../types';
 import { Upload, Maximize2, PenTool, RotateCw, Move as MoveIcon } from 'lucide-react';
 
@@ -93,6 +91,155 @@ const getPathBounds = (points: Point[]) => {
     };
 };
 
+/**
+ * Constructs a CSS font string compatible with Canvas 2D Context.
+ * Maps variable axes (wght, wdth, slnt) to standard CSS descriptors.
+ */
+const constructCanvasFont = (layer: TextLayer, width: number): string => {
+    const fontSize = (layer.textSize / 100) * width;
+    const fontFamily = `"${layer.fontFamily}"`; // Quote family to handle spaces safely
+    
+    // 1. Weight (wght)
+    let weight = layer.isBold ? 700 : 400;
+    if (layer.fontVariations && layer.fontVariations['wght'] !== undefined) {
+        weight = Math.round(layer.fontVariations['wght']);
+    }
+
+    // 2. Width/Stretch (wdth)
+    let stretch = "normal";
+    if (layer.fontVariations && layer.fontVariations['wdth'] !== undefined) {
+        const wVal = layer.fontVariations['wdth'];
+        if (wVal !== 100) {
+            stretch = `${Math.round(wVal)}%`;
+        }
+    }
+
+    // 3. Style/Slant (slnt/ital)
+    let style = layer.isItalic ? 'italic' : 'normal';
+    if (layer.fontVariations && layer.fontVariations['slnt'] !== undefined) {
+        const slnt = layer.fontVariations['slnt'];
+        if (slnt !== 0) {
+             style = `oblique ${Math.abs(slnt)}deg`;
+        }
+    }
+
+    // Syntax: [style] [variant] [weight] [stretch] [size]/[line-height] [family]
+    return `${style} normal ${weight} ${stretch} ${fontSize}px/1 ${fontFamily}`;
+};
+
+/**
+ * Constructs the CSS font-variation-settings string.
+ */
+const getFontVariationSettings = (layer: TextLayer): string => {
+    if (!layer.fontVariations || Object.keys(layer.fontVariations).length === 0) {
+        return 'normal';
+    }
+    return Object.entries(layer.fontVariations)
+        .map(([key, val]) => `"${key}" ${val}`)
+        .join(', ');
+};
+
+/**
+ * Creates an SVG Data URL containing the text rendered with full CSS capabilities.
+ * This is used for EXPORTING to Canvas.
+ */
+const createTextSVG = (layer: TextLayer, width: number, height: number): string => {
+    const fontSizePx = (layer.textSize / 100) * width;
+    // Note: We avoid the 'font' shorthand here to prevent resetting font-variation-settings
+    // const fontString = constructCanvasFont(layer, width); 
+    
+    const fontFamily = `"${layer.fontFamily}"`;
+    const fontWeight = layer.fontVariations && layer.fontVariations['wght'] !== undefined 
+        ? Math.round(layer.fontVariations['wght']) 
+        : (layer.isBold ? 700 : 400);
+        
+    let fontStyle = layer.isItalic ? 'italic' : 'normal';
+    if (layer.fontVariations && layer.fontVariations['slnt'] !== undefined && layer.fontVariations['slnt'] !== 0) {
+         fontStyle = `oblique ${Math.abs(layer.fontVariations['slnt'])}deg`;
+    }
+
+    const variationSettings = getFontVariationSettings(layer);
+    
+    const text = layer.isUppercase ? layer.textOverlay.toUpperCase() : layer.textOverlay;
+    
+    // Split lines for consistent rendering
+    const lines = text.split('\n');
+    
+    // Generate HTML content EXACTLY like renderTextLayersOverlay
+    const generateHtmlContent = () => {
+        return lines.map(line => {
+            const charSpans = line.split('').map(char => {
+                const charDisplay = char === ' ' ? '&nbsp;' : char;
+                const transform = layer.letterRotation !== 0 ? `transform: rotate(${layer.letterRotation}deg); display: inline-block;` : 'display: inline-block;';
+                return `<span style="${transform}">${charDisplay}</span>`;
+            }).join('');
+            return `<div style="white-space: pre; display: block;">${charSpans}</div>`;
+        }).join('');
+    };
+
+    const xPct = layer.overlayPosition.x;
+    const yPct = layer.overlayPosition.y;
+
+    // Shadow Math
+    const angleRad = (layer.shadowAngle * Math.PI) / 180;
+    const shadowDist = (layer.shadowOffset / 100) * fontSizePx;
+    const sX = shadowDist * Math.cos(angleRad);
+    const sY = shadowDist * Math.sin(angleRad);
+    const sBlur = (layer.shadowBlur / 100) * fontSizePx * 2;
+    const sColor = hexToRgba(layer.shadowColor, layer.shadowOpacity ?? 1);
+    const shadowStyle = layer.hasShadow ? `${sX}px ${sY}px ${sBlur}px ${sColor}` : 'none';
+
+    // Effects
+    const webkitTextStroke = layer.hasOutline ? `${layer.outlineWidth}px ${layer.outlineColor}` : 
+                             (layer.isHollow ? `2px ${layer.textColor}` : 'none');
+    const colorStyle = layer.isHollow ? 'transparent' : layer.textColor;
+
+    const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+        <foreignObject width="100%" height="100%">
+            <div xmlns="http://www.w3.org/1999/xhtml" style="
+                width: 100%;
+                height: 100%;
+                position: relative;
+                overflow: visible;
+                background: transparent;
+                font-synthesis: none;
+                -webkit-font-smoothing: antialiased;
+                -moz-osx-font-smoothing: grayscale;
+            ">
+                <div style="
+                    position: absolute;
+                    left: ${xPct}%;
+                    top: ${yPct}%;
+                    transform: translate(-50%, -50%) rotate(${layer.rotation}deg) scale(${layer.flipX ? -1 : 1}, ${layer.flipY ? -1 : 1});
+                    transform-origin: center center;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: ${layer.textAlign === 'center' ? 'center' : layer.textAlign === 'right' ? 'flex-end' : 'flex-start'};
+                    text-align: ${layer.textAlign};
+                    font-family: ${fontFamily};
+                    font-size: ${fontSizePx}px;
+                    font-weight: ${fontWeight};
+                    font-style: ${fontStyle};
+                    font-variation-settings: ${variationSettings};
+                    color: ${colorStyle};
+                    line-height: 1;
+                    letter-spacing: ${layer.letterSpacing * (fontSizePx/50)}px;
+                    white-space: pre;
+                    text-shadow: ${shadowStyle};
+                    -webkit-text-stroke: ${webkitTextStroke};
+                ">
+                    ${generateHtmlContent()}
+                </div>
+            </div>
+        </foreignObject>
+    </svg>
+    `;
+    
+    return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+};
+
+
 // Helper: Get text metrics (Tight Ink Bounds)
 const measureLineMetrics = (ctx: CanvasRenderingContext2D, text: string, letterSpacing: number) => {
     const chars = text.split('');
@@ -100,12 +247,10 @@ const measureLineMetrics = (ctx: CanvasRenderingContext2D, text: string, letterS
     let minX = Infinity;
     let maxX = -Infinity;
     
-    // If empty
     if (chars.length === 0) return { inkLeft: 0, inkRight: 0, inkWidth: 0, advanceWidth: 0 };
 
     chars.forEach((char, i) => {
         const metrics = ctx.measureText(char);
-        // Actual ink bounds relative to current cursor position
         const charInkLeft = currentX - metrics.actualBoundingBoxLeft;
         const charInkRight = currentX + metrics.actualBoundingBoxRight;
         
@@ -125,18 +270,12 @@ const measureLineMetrics = (ctx: CanvasRenderingContext2D, text: string, letterS
 
 const measureTextLayout = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: number) => {
     const fontSize = (layer.textSize / 100) * width;
-    
-    // Variable Font Support Logic
-    const weight = layer.fontVariations?.['wght'] ? Math.round(layer.fontVariations['wght']) : (layer.isBold ? 700 : 400);
-    // Note: Canvas font string supports 'condensed', 'semi-condensed' etc, but rarely raw numbers for width unless using font-stretch css mapping
-    // We stick to constructing standard font string for measurements
-    
-    ctx.font = `${layer.isItalic ? 'italic' : 'normal'} ${weight} ${fontSize}px "${layer.fontFamily}"`;
+    ctx.font = constructCanvasFont(layer, width);
     
     const scaledLetterSpacing = layer.letterSpacing * (fontSize / 50);
     const rawText = layer.isUppercase ? layer.textOverlay.toUpperCase() : layer.textOverlay;
     const lines = rawText.split('\n');
-    const lineHeight = fontSize * 1.0; // Tight line height matching font size
+    const lineHeight = fontSize * 1.0; 
     const totalHeight = lines.length * lineHeight;
 
     let maxInkWidth = 0;
@@ -146,20 +285,16 @@ const measureTextLayout = (ctx: CanvasRenderingContext2D, layer: TextLayer, widt
         if (metrics.inkWidth > maxInkWidth) maxInkWidth = metrics.inkWidth;
     });
 
-    // Add a tiny buffer for handles so they don't clip exact pixels
-    const buffer = fontSize * 0.1; 
-    return { width: maxInkWidth + buffer, height: totalHeight };
+    const buffer = fontSize * 0.5; // Generous buffer for gizmo
+    return { width: maxInkWidth + buffer, height: totalHeight + (buffer * 0.5) };
 };
 
 const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enableZoom, className, onImageUpload, onPathDrawn, onUpdateDesign, onLayerDoubleClicked }, ref) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textCanvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  
-  // Scratch canvas for offscreen composition
-  const scratchCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  
-  // Store the actual loaded image for rendering onto canvas
+  const bufferCanvasRef = useRef<HTMLCanvasElement | null>(null); // Full-size buffer for compositing
+  const scratchCanvasRef = useRef<HTMLCanvasElement | null>(null); // Per-layer scratch
   const bgImageRef = useRef<HTMLImageElement | null>(null);
 
   const [isDraggingFile, setIsDraggingFile] = useState(false);
@@ -167,27 +302,24 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [imgDims, setImgDims] = useState<{ w: number, h: number } | null>(null);
   
-  // Interaction States
   const [interactionMode, setInteractionMode] = useState<'NONE' | 'PAN' | 'DRAW_PATH' | 'MOVE_PATH' | 'GIZMO_MOVE' | 'GIZMO_SCALE' | 'GIZMO_ROTATE'>('NONE');
   const [activeGizmoHandle, setActiveGizmoHandle] = useState<string | null>(null);
 
-  // Refs for drag calculations
-  const dragStartRef = useRef({ x: 0, y: 0 }); // Screen coordinates
-  // Store a map of all selected layers' initial states when drag starts
+  const dragStartRef = useRef({ x: 0, y: 0 });
   const initialLayersRef = useRef<Map<string, TextLayer>>(new Map());
   const currentPathRef = useRef<Point[]>([]);
   
-  // Metrics for Gizmos - Map of Layer ID to Bounds
   const [textBounds, setTextBounds] = useState<Record<string, { width: number, height: number }>>({});
-  // Visual Scale (Screen pixels per Intrinsic pixel)
   const [visualScale, setVisualScale] = useState(1);
 
   const activeLayer = design.layers.find(l => l.id === design.activeLayerId);
 
-  // Update Visual Scale on resize/load
-  useEffect(() => {
+  // Use Layout Effect to prevent visual jumps on load
+  useLayoutEffect(() => {
      if (containerRef.current && imgDims) {
-         // Create a ResizeObserver to update visual scale if container changes
+         if (containerRef.current.offsetWidth > 0 && imgDims.w > 0) {
+            setVisualScale(containerRef.current.offsetWidth / imgDims.w);
+         }
          const observer = new ResizeObserver(() => {
               if (containerRef.current && imgDims.w > 0) {
                  setVisualScale(containerRef.current.offsetWidth / imgDims.w);
@@ -198,7 +330,18 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
      }
   }, [imgDims]);
 
-  // Helper to lazily get or create scratch canvas
+  const getBufferCanvas = (width: number, height: number) => {
+      if (!bufferCanvasRef.current) {
+          bufferCanvasRef.current = document.createElement('canvas');
+      }
+      const canvas = bufferCanvasRef.current;
+      if (canvas.width !== width || canvas.height !== height) {
+          canvas.width = width;
+          canvas.height = height;
+      }
+      return canvas;
+  };
+
   const getScratchCanvas = (width: number, height: number) => {
       if (!scratchCanvasRef.current) {
           scratchCanvasRef.current = document.createElement('canvas');
@@ -211,7 +354,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
       return canvas;
   };
 
-  // Reset zoom and get dims when the image changes
   useEffect(() => {
     setZoomScale(1);
     setPan({ x: 0, y: 0 });
@@ -224,7 +366,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
             setImgDims({ w: i.naturalWidth, h: i.naturalHeight });
         };
         i.onerror = () => {
-            console.error("Failed to load image dimensions");
             bgImageRef.current = null;
             setImgDims(null); 
         };
@@ -235,7 +376,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
     }
   }, [imageSrc]);
 
-  // Update Text Bounds for ALL selected layers when selection or content changes
   useEffect(() => {
       if (textCanvasRef.current && imgDims && design.selectedLayerIds.length > 0) {
           const ctx = textCanvasRef.current.getContext('2d');
@@ -252,34 +392,24 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
       }
   }, [design.layers, design.selectedLayerIds, imgDims]);
 
-  // Handle mouse wheel zoom
   const handleWheel = (e: React.WheelEvent) => {
     if (!enableZoom || !imageSrc) return;
-    
     const rect = e.currentTarget.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
     const centerY = rect.top + rect.height / 2;
-    
-    // Mouse position relative to the center of the container
     const mouseX = e.clientX - centerX;
     const mouseY = e.clientY - centerY;
-
     const scaleAmount = -e.deltaY * 0.001; 
     const nextScale = Math.min(Math.max(0.1, zoomScale + scaleAmount), 5); 
-    
-    // Only update pan if scale actually changes
     if (nextScale !== zoomScale) {
-        // Calculate new pan so that the point under the mouse stays under the mouse
         const scaleRatio = nextScale / zoomScale;
         const newPanX = mouseX - (mouseX - pan.x) * scaleRatio;
         const newPanY = mouseY - (mouseY - pan.y) * scaleRatio;
-
         setPan({ x: newPanX, y: newPanY });
         setZoomScale(nextScale);
     }
   };
 
-  // Handle Double Click to Reset Zoom
   const handleCanvasDoubleClick = (e: React.MouseEvent) => {
       if (imageSrc) {
           setZoomScale(1);
@@ -287,29 +417,20 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
       }
   };
 
-  // Helper to map screen event coordinates to Intrinsic Image Coordinates
   const getIntrinsicCoordinates = (e: React.MouseEvent) => {
       if (!containerRef.current || !imgDims) return null;
       const rect = containerRef.current.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) return null;
-
       const relX = (e.clientX - rect.left) / rect.width;
       const relY = (e.clientY - rect.top) / rect.height;
-
-      return {
-          x: relX * imgDims.w,
-          y: relY * imgDims.h
-      };
+      return { x: relX * imgDims.w, y: relY * imgDims.h };
   };
-
-  // --- Interaction Handlers ---
 
   const handleMouseDown = (e: React.MouseEvent) => {
       if (!imageSrc || !imgDims) return;
       const coords = getIntrinsicCoordinates(e);
       if (!coords) return;
 
-      // 1. Gizmo Interactions
       const target = e.target as HTMLElement;
       const handleEl = target.closest('[data-handle]');
       const handleType = handleEl?.getAttribute('data-handle');
@@ -317,8 +438,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
       if (handleType && activeLayer) {
           e.preventDefault();
           e.stopPropagation();
-
-          // Snapshot ALL selected layers
           const snapshotMap = new Map<string, TextLayer>();
           design.layers.forEach(l => {
               if (design.selectedLayerIds.includes(l.id)) {
@@ -328,7 +447,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
               }
           });
           initialLayersRef.current = snapshotMap;
-          
           dragStartRef.current = { x: e.clientX, y: e.clientY };
 
           if (handleType === 'rotate') {
@@ -344,7 +462,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
           return;
       }
 
-      // 2. Path Mode interactions
       if (activeLayer?.isPathInputMode) {
           e.preventDefault();
           setInteractionMode('DRAW_PATH');
@@ -352,13 +469,9 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
           return;
       }
 
-      // Standard Panning (Default Left Click)
       if (enableZoom && e.button === 0) {
           setInteractionMode('PAN');
-          dragStartRef.current = {
-              x: e.clientX - pan.x,
-              y: e.clientY - pan.y
-          };
+          dragStartRef.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
           e.preventDefault();
       }
   };
@@ -370,37 +483,27 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
       if (interactionMode === 'DRAW_PATH') {
           if (!coords) return;
           currentPathRef.current.push(coords);
-          renderToContext(textCanvasRef.current?.getContext('2d') || null, imgDims.w, imgDims.h, design.layers, true);
+          // Force render to update path line
+          renderToContext(textCanvasRef.current?.getContext('2d') || null, imgDims.w, imgDims.h, design.layers, true, true, undefined, undefined, true);
           return;
       }
 
       if (interactionMode === 'PAN') {
           e.preventDefault();
-          setPan({
-              x: e.clientX - dragStartRef.current.x,
-              y: e.clientY - dragStartRef.current.y
-          });
+          setPan({ x: e.clientX - dragStartRef.current.x, y: e.clientY - dragStartRef.current.y });
           return;
       }
 
-      // --- GIZMO LOGIC ---
       if (['GIZMO_MOVE', 'GIZMO_SCALE', 'GIZMO_ROTATE'].includes(interactionMode)) {
           e.preventDefault();
           
           const primaryStartLayer = activeLayer ? initialLayersRef.current.get(activeLayer.id) : null;
-          if (!primaryStartLayer) return; // Should generally have a primary layer if gizmo is active
+          if (!primaryStartLayer) return;
 
-          // Common Metric Vars
           const rect = containerRef.current!.getBoundingClientRect();
           const scaleFactor = imgDims.w / rect.width;
 
-          // PATH MODE TRANSFORM (Only supports single layer for now, usually)
           if (activeLayer?.isPathMoveMode && primaryStartLayer.pathPoints.length > 0) {
-               // Path Transform Logic (Simplified for single active layer support primarily, 
-               // but could extend if multiple path layers selected)
-               // For safety, let's only do path transform if it's the active layer and single select?
-               // The controls logic forces single select for Path Tool, so this is safe.
-
                const points = primaryStartLayer.pathPoints;
                const bounds = getPathBounds(points);
                const cx = bounds.cx;
@@ -447,7 +550,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                return;
           }
 
-          // STANDARD TEXT TRANSFORM (Multi-Layer Support)
           const updatedLayers = design.layers.map(l => {
               if (!design.selectedLayerIds.includes(l.id)) return l;
               
@@ -457,10 +559,8 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
               if (interactionMode === 'GIZMO_MOVE') {
                    const dxScreen = e.clientX - dragStartRef.current.x;
                    const dyScreen = e.clientY - dragStartRef.current.y;
-                   
                    const dxIntrinsic = dxScreen * scaleFactor;
                    const dyIntrinsic = dyScreen * scaleFactor;
-                   
                    const dxPercent = (dxIntrinsic / imgDims.w) * 100;
                    const dyPercent = (dyIntrinsic / imgDims.h) * 100;
 
@@ -474,41 +574,24 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
               }
 
               if (interactionMode === 'GIZMO_SCALE') {
-                   // Scale is based on the Active Layer's center/handles
-                   // All selected layers scale relative to their OWN size by the SAME ratio
-                   // This preserves relative proportions.
                    const primaryCx = rect.left + (primaryStartLayer.overlayPosition.x / 100) * rect.width;
                    const primaryCy = rect.top + (primaryStartLayer.overlayPosition.y / 100) * rect.height;
-                   
                    const startDist = Math.hypot(dragStartRef.current.x - primaryCx, dragStartRef.current.y - primaryCy);
                    const currDist = Math.hypot(e.clientX - primaryCx, e.clientY - primaryCy);
-                   
                    const ratio = currDist / (startDist || 1);
                    const newSize = Math.min(50, Math.max(0.1, startState.textSize * ratio));
-                   
                    return { ...l, textSize: newSize };
               }
 
               if (interactionMode === 'GIZMO_ROTATE') {
                    const primaryCx = rect.left + (primaryStartLayer.overlayPosition.x / 100) * rect.width;
                    const primaryCy = rect.top + (primaryStartLayer.overlayPosition.y / 100) * rect.height;
-                   
                    const angleRad = Math.atan2(e.clientY - primaryCy, e.clientX - primaryCx);
-                   // We need Delta from drag start to apply to all layers
                    const startAngleRad = Math.atan2(dragStartRef.current.y - primaryCy, dragStartRef.current.x - primaryCx);
                    let deltaDeg = (angleRad - startAngleRad) * (180 / Math.PI);
-                   
                    let newAngle = startState.rotation + deltaDeg;
-                   
-                   // Snapping logic applies to the delta usually, or the final angle?
-                   // If shift is held, snap to 15 deg increments.
-                   if (e.shiftKey) {
-                       newAngle = Math.round(newAngle / 15) * 15;
-                   }
-                   
-                   // Normalize
+                   if (e.shiftKey) newAngle = Math.round(newAngle / 15) * 15;
                    newAngle = ((newAngle % 360) + 360) % 360;
-
                    return { ...l, rotation: newAngle };
               }
               return l;
@@ -528,46 +611,37 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
       initialLayersRef.current.clear();
   };
 
-
   // --- Core Rendering Logic ---
   const renderLayerVisuals = (
       ctx: CanvasRenderingContext2D,
       layer: TextLayer,
       width: number,
       height: number,
-      isPreview: boolean
+      isPreview: boolean,
+      forceUseCanvas: boolean = false
   ) => {
     if (!layer.visible) return;
 
-    const isActive = layer.id === design.activeLayerId;
-    
-    // Set Base Context State
+    // In Preview Mode, we now render ALL standard text layers via DOM Overlay to prevent jumping.
+    // Only Path layers are drawn here.
+    const isStandardLayer = layer.pathPoints.length === 0;
+    if (isPreview && !forceUseCanvas && isStandardLayer) return;
+
+    // ... Standard Canvas Rendering ...
     ctx.filter = 'none';
     ctx.globalAlpha = 1.0;
-    // We use source-over for the scratch buffer always
     ctx.globalCompositeOperation = 'source-over';
 
+    const isActive = layer.id === design.activeLayerId;
     const activePointsRaw = (interactionMode === 'DRAW_PATH' && isActive) ? currentPathRef.current : layer.pathPoints;
     const activePoints = (interactionMode === 'DRAW_PATH' && isActive) ? activePointsRaw : getSmoothedPoints(activePointsRaw, layer.pathSmoothing);
 
-    // If we are DRAWING the path, we don't render the text at all, just return.
-    // The path line is now rendered in renderToContext to avoid shadows.
     if (interactionMode === 'DRAW_PATH' && isActive) return; 
 
     const fontSize = (layer.textSize / 100) * width;
 
-    // --- Variable Font Application ---
-    // If 'wght' is present in variations, use it. Otherwise use bold toggle.
-    const weight = layer.fontVariations?.['wght'] ? Math.round(layer.fontVariations['wght']) : (layer.isBold ? 700 : 400);
-    const fontStyle = layer.isItalic ? 'italic' : 'normal';
-
-    // Canvas font string construction
-    ctx.font = `${fontStyle} ${weight} ${fontSize}px "${layer.fontFamily}"`;
-    
-    // Note: 'wdth' is supported in CSS via font-stretch, but limited in Canvas font string in some browsers.
-    // If we wanted to support width, we might try: `ctx.font = "condensed 700 20px Inter"` etc, 
-    // but mapping numeric width to keywords is lossy.
-    
+    // Construct Font String (includes wght, wdth, slnt)
+    ctx.font = constructCanvasFont(layer, width);
     ctx.textAlign = 'left'; 
     ctx.textBaseline = 'middle';
 
@@ -604,20 +678,14 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
         normalModeFillStyle = grad;
     }
 
-    const drawTextItem = (
-        text: string, 
-        offsetX: number, 
-        offsetY: number, 
-        colorOverride?: string, 
-        forceHollow?: boolean, 
-        disableOutline: boolean = false
-    ) => {
+    const drawTextItem = (text: string, offsetX: number, offsetY: number, colorOverride?: string, forceHollow?: boolean, disableOutline: boolean = false) => {
         const isHollow = forceHollow !== undefined ? forceHollow : layer.isHollow;
         const shouldDrawOutline = !disableOutline && layer.hasOutline;
 
         ctx.save();
 
         if (activePoints && activePoints.length > 1) {
+            // Path Text Logic...
             const path = activePoints;
             const distances = [0];
             for (let i = 1; i < path.length; i++) {
@@ -626,48 +694,36 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                 distances.push(distances[i-1] + Math.sqrt(dx*dx + dy*dy));
             }
             const totalPathLen = distances[distances.length - 1];
-
             let totalTextWidth = 0;
             for (const char of text) {
                 totalTextWidth += ctx.measureText(char).width + scaledLetterSpacing;
             }
-
             let currentDist = 0;
             if (layer.textAlign === 'center') currentDist = (totalPathLen - totalTextWidth) / 2;
             if (layer.textAlign === 'right') currentDist = totalPathLen - totalTextWidth;
-            
             currentDist += offsetX;
             const normalOffset = offsetY;
 
             for (const char of text) {
                 const charWidth = ctx.measureText(char).width;
                 const charMidDist = currentDist + (charWidth / 2);
-
                 if (charMidDist >= 0 && charMidDist <= totalPathLen) {
                     let idx = 0;
-                    while (distances[idx + 1] < charMidDist && idx < distances.length - 2) {
-                        idx++;
-                    }
-                    
+                    while (distances[idx + 1] < charMidDist && idx < distances.length - 2) idx++;
                     const p1 = path[idx];
                     const p2 = path[idx+1];
                     const segStart = distances[idx];
                     const segLen = distances[idx+1] - segStart;
                     const t = (charMidDist - segStart) / (segLen || 1); 
-
                     const xBase = p1.x + (p2.x - p1.x) * t;
                     const yBase = p1.y + (p2.y - p1.y) * t;
                     const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
-
                     const xFinal = xBase + Math.sin(angle) * normalOffset; 
                     const yFinal = yBase - Math.cos(angle) * normalOffset; 
-                    
                     const letterRotRad = (layer.letterRotation * Math.PI) / 180;
                     const totalRotation = angle + letterRotRad;
 
-                    // Per-character isolation
                     ctx.save(); 
-
                     ctx.translate(xFinal, yFinal);
                     ctx.rotate(totalRotation);
                     
@@ -684,30 +740,24 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                     } else {
                          ctx.fillStyle = activeFill;
                          ctx.fillText(char, 0, 0);
-                         
                          if (shouldDrawOutline) {
                              ctx.lineWidth = layer.outlineWidth;
                              ctx.strokeStyle = layer.outlineColor;
                              ctx.strokeText(char, 0, 0);
                          }
                     }
-
                     ctx.restore();
                 }
                 currentDist += charWidth + scaledLetterSpacing;
             }
-
         } else {
+            // Standard Text Rendering (Only for Fallback or Export)
             const xPos = (layer.overlayPosition.x / 100) * width;
             const yPos = (layer.overlayPosition.y / 100) * height;
-            
             ctx.translate(xPos, yPos);
-            
-            // Standard Rotation
             const mainRotation = layer.rotation;
             const mainRotationRad = (mainRotation * Math.PI) / 180;
             if (mainRotation !== 0) ctx.rotate(mainRotationRad);
-            
             const sX = layer.flipX ? -1 : 1;
             const sY = layer.flipY ? -1 : 1;
             if (sX !== 1 || sY !== 1) ctx.scale(sX, sY);
@@ -718,30 +768,21 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                 const lineY = startY + (i * lineHeight) + offsetY;
                 const m = lineMetrics[i];
                 const chars = line.split('');
-                
                 let startX = 0;
                 
-                if (layer.textAlign === 'left') {
-                    startX = -(maxInkWidth / 2) - m.inkLeft;
-                } else if (layer.textAlign === 'right') {
-                    startX = (maxInkWidth / 2) - m.inkRight;
-                } else {
-                    const inkCenter = (m.inkLeft + m.inkRight) / 2;
-                    startX = -inkCenter;
-                }
+                if (layer.textAlign === 'left') startX = -(maxInkWidth / 2) - m.inkLeft;
+                else if (layer.textAlign === 'right') startX = (maxInkWidth / 2) - m.inkRight;
+                else startX = -(m.inkLeft + m.inkRight) / 2;
                 
                 let currentAdvance = startX + offsetX;
                 chars.forEach((char, idx) => {
                     const charW = ctx.measureText(char).width;
                     const letterRotRad = (layer.letterRotation * Math.PI) / 180;
-                    
                     const isRotated = layer.letterRotation !== 0;
                     
                     ctx.save();
-                    
                     const centerX = currentAdvance + charW / 2;
                     const centerY = lineY; 
-                    
                     ctx.translate(centerX, centerY);
                     if (isRotated) ctx.rotate(letterRotRad);
                     ctx.translate(-centerX, -centerY);
@@ -753,69 +794,53 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                     } else {
                         ctx.fillStyle = colorOverride || normalModeFillStyle;
                         ctx.fillText(char, currentAdvance, lineY);
-                        
                         if (shouldDrawOutline) {
                             ctx.lineWidth = layer.outlineWidth;
                             ctx.strokeStyle = layer.outlineColor;
                             ctx.strokeText(char, currentAdvance, lineY);
                         }
                     }
-
                     ctx.restore();
-
                     currentAdvance += charW + scaledLetterSpacing;
                 });
             });
-
-            // Restores happen automatically via outer ctx.restore() 
         }
-
         ctx.restore();
     };
 
-
-    // 1. Special Effects
+    // Special Effects Rendering (Echo, Glitch, etc.)
     if (layer.specialEffect === 'echo') {
         const echoCount = 5;
         const startOpacity = 1.0;
         const angleRad = (layer.effectAngle * Math.PI) / 180;
         const distanceStep = layer.effectIntensity * (width * 0.0005); 
-
-        // We render echoes on the scratch canvas. 
-        // Note: Global alpha of the layer is applied later during composition.
-        // Here we just control relative opacity of echoes.
         for (let i = echoCount; i > 0; i--) {
              const dx = Math.cos(angleRad) * distanceStep * i;
              const dy = Math.sin(angleRad) * distanceStep * i;
              ctx.globalAlpha = startOpacity * (0.1 + (0.5 * (1 - i/echoCount))); 
-             drawTextItem(rawText, dx, dy, undefined, layer.isHollow);
+             drawTextItem(layer.textOverlay, dx, dy, undefined, layer.isHollow);
         }
     }
 
     if (layer.specialEffect === 'glitch') {
         const offset = (layer.effectIntensity / 100) * (fontSize * 0.5);
         const angleRad = (layer.effectAngle * Math.PI) / 180;
-
+        const rawText = layer.isUppercase ? layer.textOverlay.toUpperCase() : layer.textOverlay;
         if (layer.isRainbowGlitch) {
              const colors = ['#FF0000', '#FF7F00', '#FFFF00', '#00FF00', '#0000FF', '#4B0082', '#9400D3'];
              const spread = offset * 3.0; 
-             
              ctx.save();
              ctx.globalCompositeOperation = 'source-over'; 
-
              const blurScale = width / 1000;
              const blurAmount = layer.rainbowBlur * blurScale;
              const OFFSET_HACK = 20000;
-
              colors.forEach((c, i) => {
                  const mid = Math.floor(colors.length / 2); 
                  const dist = (i - mid) * spread;
                  const dx = Math.cos(angleRad) * dist;
                  const dy = Math.sin(angleRad) * dist;
-                 
                  const rgb = hexToRgb(c);
                  const rgbaColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${layer.rainbowOpacity})`;
-                 
                  if (blurAmount > 0) {
                      ctx.save();
                      ctx.shadowColor = rgbaColor;
@@ -833,17 +858,13 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
         } else {
             const c1 = layer.effectColor;
             const c2 = layer.effectColor2;
-
-            // Calculate direction vector for standard glitch
             const dx = Math.cos(angleRad) * offset;
             const dy = Math.sin(angleRad) * offset;
-            
             ctx.save();
             ctx.globalAlpha = 1.0; 
             ctx.globalCompositeOperation = 'screen'; 
             drawTextItem(rawText, -dx, -dy, c1, false);
             ctx.restore();
-
             ctx.save();
             ctx.globalAlpha = 1.0; 
             ctx.globalCompositeOperation = 'screen';
@@ -852,118 +873,165 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
         }
     }
 
-    // 2. Main Text Pass
+    // Main Text Pass
     ctx.save();
     ctx.globalAlpha = 1.0;
-    // We are drawing onto a clean scratch canvas, so blend modes inside the text itself (like gradient) work.
-    // The layer-wide blend mode is applied during composition.
     ctx.globalCompositeOperation = 'source-over';
-    drawTextItem(rawText, 0, 0, undefined, undefined); 
+    drawTextItem(layer.textOverlay, 0, 0, undefined, undefined); 
     ctx.restore();
   };
 
-  const renderToContext = useCallback((
-      ctx: CanvasRenderingContext2D | null, 
+  const renderToContext = useCallback(async (
+      targetCtx: CanvasRenderingContext2D | null, 
       width: number, 
       height: number,
       layers: TextLayer[],
       isPreview: boolean = false,
       shouldClear: boolean = true,
       overrideBlendMode?: GlobalCompositeOperation,
-      overrideBgImage?: HTMLImageElement
+      overrideBgImage?: HTMLImageElement,
+      forceUseCanvas: boolean = false
   ) => {
-      if (!ctx) return;
-      
+      if (!targetCtx) return;
+
+      // Use a double-buffering strategy.
+      const buffer = getBufferCanvas(width, height);
+      const bufferCtx = buffer.getContext('2d');
+      if (!bufferCtx) return;
+
+      // 1. Render Background to Buffer
       const bgImg = overrideBgImage || bgImageRef.current;
       
-      // We use a scratch canvas to bake the layer's transform and effects (like curvature).
-      // This allows us to apply the drop shadow in "Screen Space" (Global) rather than "Layer Space" (Local).
-      // This prevents the shadow from rotating with the text, which is the "flying off" issue.
+      // Clear Buffer
+      bufferCtx.clearRect(0, 0, width, height);
+
+      // Draw Background
+      if (bgImg) {
+          bufferCtx.drawImage(bgImg, 0, 0, width, height);
+      }
+      
+      // 2. Render Layers to Buffer
       const scratch = getScratchCanvas(width, height);
       const scratchCtx = scratch.getContext('2d');
-      if (!scratchCtx) return;
+      
+      for (const layer of layers) {
+          if (!layer.visible) continue;
+          if (!scratchCtx) continue;
 
-      if (shouldClear) {
-          ctx.clearRect(0, 0, width, height);
-          if (bgImg) {
-              ctx.drawImage(bgImg, 0, 0, width, height);
+          // Clear Scratch for this layer
+          scratchCtx.clearRect(0, 0, width, height);
+          
+          // CRITICAL FIX: If we are in preview mode, and this layer is handled by DOM overlay, SKIP IT.
+          // This prevents double rendering and misalignment.
+          // Path Layers are always drawn in Canvas.
+          const isDomHandled = isPreview && !forceUseCanvas && layer.pathPoints.length === 0;
+
+          if (isDomHandled) {
+              continue; // Handled by renderTextLayersOverlay
+          }
+
+          // If we are here, we are either exporting OR it is a Path Layer.
+          // For Exporting standard layers, we use createTextSVG to get pixel-perfect variable fonts.
+          const shouldUseSvgRenderer = !forceUseCanvas && layer.pathPoints.length === 0;
+
+          if (shouldUseSvgRenderer) {
+              const svgData = createTextSVG(layer, width, height);
+              const img = new Image();
+              
+              const loadPromise = new Promise<boolean>((resolve) => {
+                  img.onload = () => resolve(true);
+                  img.onerror = () => resolve(false);
+                  img.src = svgData;
+              });
+
+              // Add timeout race to prevent hanging
+              const timeoutPromise = new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 500));
+
+              const isLoaded = await Promise.race([loadPromise, timeoutPromise]);
+              
+              if (isLoaded) {
+                  // If SVG loads, draw it
+                  if (layer.hasShadow) {
+                       const angleRad = (layer.shadowAngle * Math.PI) / 180;
+                       const fontSize = (layer.textSize / 100) * width;
+                       const dist = (layer.shadowOffset / 100) * fontSize;
+                       const sx = dist * Math.cos(angleRad);
+                       const sy = dist * Math.sin(angleRad);
+                       const sAlpha = (layer.shadowOpacity ?? 1);
+                       scratchCtx.save();
+                       scratchCtx.shadowColor = hexToRgba(layer.shadowColor, sAlpha);
+                       scratchCtx.shadowBlur = (layer.shadowBlur / 100) * (fontSize * 2);
+                       scratchCtx.shadowOffsetX = sx;
+                       scratchCtx.shadowOffsetY = sy;
+                       
+                       scratchCtx.drawImage(img, 0, 0);
+                       scratchCtx.restore();
+                  } else {
+                       scratchCtx.drawImage(img, 0, 0);
+                  }
+              } else {
+                  // Fallback to standard canvas rendering if SVG fails or times out
+                  renderLayerVisuals(scratchCtx, layer, width, height, isPreview, forceUseCanvas);
+              }
+          } else {
+              renderLayerVisuals(scratchCtx, layer, width, height, isPreview, forceUseCanvas);
+          }
+
+          // Composite Scratch to Buffer
+          bufferCtx.save();
+          bufferCtx.setTransform(1, 0, 0, 1, 0, 0); 
+          const effectiveBlendMode = overrideBlendMode || (layer.blendMode === 'normal' ? 'source-over' : layer.blendMode);
+          bufferCtx.globalAlpha = layer.opacity;
+          bufferCtx.globalCompositeOperation = effectiveBlendMode as GlobalCompositeOperation;
+
+          // Apply Shadow for standard rendering (SVG renderer handled shadow above in scratch)
+          if (!shouldUseSvgRenderer && layer.hasShadow) {
+              const angleRad = (layer.shadowAngle * Math.PI) / 180;
+              const fontSize = (layer.textSize / 100) * width;
+              const dist = (layer.shadowOffset / 100) * fontSize;
+              const sx = dist * Math.cos(angleRad);
+              const sy = dist * Math.sin(angleRad);
+              const sAlpha = (layer.shadowOpacity ?? 1);
+              bufferCtx.shadowColor = hexToRgba(layer.shadowColor, sAlpha);
+              bufferCtx.shadowBlur = (layer.shadowBlur / 100) * (fontSize * 2);
+              bufferCtx.shadowOffsetX = sx;
+              bufferCtx.shadowOffsetY = sy;
+          }
+
+          bufferCtx.drawImage(scratch, 0, 0);
+          bufferCtx.restore();
+
+          // 3. Render Path Line (if applicable)
+          const isActive = layer.id === design.activeLayerId;
+          const isDrawing = interactionMode === 'DRAW_PATH' && isActive;
+          const activePointsRaw = isDrawing ? currentPathRef.current : layer.pathPoints;
+          const activePoints = isDrawing ? activePointsRaw : getSmoothedPoints(activePointsRaw, layer.pathSmoothing);
+          const showPathLine = isPreview && isActive && ((isDrawing && activePoints.length > 1) || (layer.isPathMoveMode && activePoints.length > 1));
+
+          if (showPathLine) {
+              bufferCtx.save();
+              bufferCtx.beginPath();
+              bufferCtx.strokeStyle = '#ec4899'; 
+              bufferCtx.lineWidth = Math.max(2, width * 0.003); 
+              bufferCtx.lineCap = 'round';
+              bufferCtx.lineJoin = 'round';
+              if (layer.isPathMoveMode && !isDrawing) {
+                  bufferCtx.setLineDash([15, 15]); 
+                  bufferCtx.globalAlpha = 0.6;
+              }
+              bufferCtx.moveTo(activePoints[0].x, activePoints[0].y);
+              for(const p of activePoints) bufferCtx.lineTo(p.x, p.y);
+              bufferCtx.stroke();
+              bufferCtx.restore();
           }
       }
 
-      layers.forEach(layer => {
-          if (!layer.visible) return;
-
-          // 1. Clear Scratch
-          scratchCtx.clearRect(0, 0, width, height);
-          
-          // 2. Render Layer to Scratch (Local Transforms applied here)
-          renderLayerVisuals(scratchCtx, layer, width, height, isPreview);
-
-          // 3. Composite Scratch to Main (Identity Transform)
-          ctx.save();
-          ctx.setTransform(1, 0, 0, 1, 0, 0); // Identity transform
-
-          // Apply Blend Mode
-          const effectiveBlendMode = overrideBlendMode || (layer.blendMode === 'normal' ? 'source-over' : layer.blendMode);
-          ctx.globalAlpha = layer.opacity;
-          ctx.globalCompositeOperation = effectiveBlendMode as GlobalCompositeOperation;
-
-          // Apply Screen-Space Shadow
-          if (layer.hasShadow) {
-              const angleRad = (layer.shadowAngle * Math.PI) / 180;
-              const fontSize = (layer.textSize / 100) * width;
-              // Shadow distance relative to font size ensures consistency
-              const dist = (layer.shadowOffset / 100) * fontSize;
-              
-              const sx = dist * Math.cos(angleRad);
-              const sy = dist * Math.sin(angleRad);
-
-              const sAlpha = (layer.shadowOpacity ?? 1);
-              ctx.shadowColor = hexToRgba(layer.shadowColor, sAlpha);
-              ctx.shadowBlur = (layer.shadowBlur / 100) * (fontSize * 2); // Blur relative to size
-              ctx.shadowOffsetX = sx;
-              ctx.shadowOffsetY = sy;
-          }
-
-          // Draw the baked layer. 
-          // Since shadow properties are set on 'ctx', the browser draws the shadow *behind* the image source.
-          ctx.drawImage(scratch, 0, 0);
-          
-          ctx.restore();
-
-          // 4. Draw Path Line (Directly on Main CTX, NO Shadow)
-          const isActive = layer.id === design.activeLayerId;
-          const isDrawing = interactionMode === 'DRAW_PATH' && isActive;
-          
-          const activePointsRaw = isDrawing ? currentPathRef.current : layer.pathPoints;
-          const activePoints = isDrawing ? activePointsRaw : getSmoothedPoints(activePointsRaw, layer.pathSmoothing);
-
-          const showPathLine = isPreview && isActive && (
-              (isDrawing && activePoints.length > 1) ||
-              (layer.isPathMoveMode && activePoints.length > 1)
-          );
-
-          if (showPathLine) {
-              ctx.save();
-              ctx.beginPath();
-              ctx.strokeStyle = '#ec4899'; 
-              ctx.lineWidth = Math.max(2, width * 0.003); 
-              ctx.lineCap = 'round';
-              ctx.lineJoin = 'round';
-
-              if (layer.isPathMoveMode && !isDrawing) {
-                  ctx.setLineDash([15, 15]); 
-                  ctx.globalAlpha = 0.6;
-              }
-              
-              ctx.moveTo(activePoints[0].x, activePoints[0].y);
-              for(const p of activePoints) {
-                  ctx.lineTo(p.x, p.y);
-              }
-              ctx.stroke();
-              ctx.restore();
-          }
-      });
+      // 4. COMMIT TO TARGET CONTEXT
+      // Only clear and draw once everything is ready
+      if (shouldClear) {
+          targetCtx.clearRect(0, 0, width, height);
+      }
+      targetCtx.drawImage(buffer, 0, 0);
 
   }, [design.layers, interactionMode, design.activeLayerId]);
 
@@ -977,16 +1045,13 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
       }
   }, [imgDims, design, renderToContext]);
 
-
   // Export Logic
   const generateExport = useCallback(async (): Promise<string> => {
     if (!imageSrc) throw new Error("No image to export");
     await document.fonts.ready;
-
     const finalCanvas = document.createElement('canvas');
     const finalCtx = finalCanvas.getContext('2d');
     if (!finalCtx) throw new Error("Could not get canvas context");
-
     const img = new Image();
     img.crossOrigin = "anonymous";
     await new Promise((resolve, reject) => { 
@@ -994,25 +1059,20 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
         img.onerror = reject;
         img.src = imageSrc; 
     });
-
     finalCanvas.width = img.naturalWidth;
     finalCanvas.height = img.naturalHeight;
-
-    // Use the unified rendering pipeline.
-    renderToContext(finalCtx, finalCanvas.width, finalCanvas.height, design.layers, false, true, undefined, img);
-
+    // Note: We pass isPreview=false here, which triggers the robust SVG renderer path
+    await renderToContext(finalCtx, finalCanvas.width, finalCanvas.height, design.layers, false, true, undefined, img, true);
     return finalCanvas.toDataURL('image/png');
   }, [imageSrc, renderToContext, design.layers]);
 
-  // Stamp Layers Logic
+  // Stamp Logic
   const stampLayers = useCallback(async (layerIds: string[]): Promise<string> => {
       if (!imageSrc) throw new Error("No image to stamp");
       await document.fonts.ready;
-
       const finalCanvas = document.createElement('canvas');
       const finalCtx = finalCanvas.getContext('2d');
       if (!finalCtx) throw new Error("Could not get canvas context");
-
       const img = new Image();
       img.crossOrigin = "anonymous";
       await new Promise((resolve, reject) => {
@@ -1020,15 +1080,10 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
           img.onerror = reject;
           img.src = imageSrc;
       });
-
       finalCanvas.width = img.naturalWidth;
       finalCanvas.height = img.naturalHeight;
-      
-      // Filter layers to only the ones we want to stamp
       const layersToStamp = design.layers.filter(l => layerIds.includes(l.id));
-
-      renderToContext(finalCtx, finalCanvas.width, finalCanvas.height, layersToStamp, false, true, undefined, img);
-
+      await renderToContext(finalCtx, finalCanvas.width, finalCanvas.height, layersToStamp, false, true, undefined, img, true);
       return finalCanvas.toDataURL('image/png');
   }, [imageSrc, renderToContext, design.layers]);
 
@@ -1038,6 +1093,129 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
     triggerFileUpload: () => fileInputRef.current?.click(),
     stampLayers: stampLayers
   }), [generateExport, stampLayers]);
+
+  // DOM Overlay Renderer for ALL Standard Text Layers
+  // This ensures consistent rendering between "Active" and "Inactive" states during editing
+  const renderTextLayersOverlay = () => {
+      if (!imgDims) return null;
+
+      // We only render non-path layers here. Path layers stay on the canvas.
+      const layersToRender = design.layers.filter(l => l.visible && l.pathPoints.length === 0);
+
+      if (layersToRender.length === 0) return null;
+
+      return (
+          <div 
+            className="absolute inset-0 pointer-events-none z-40 overflow-hidden"
+            // Use NATURAL RESOLUTION for the container to match pixel calculations
+            // Then Scale it down to fit visually using CSS Transform
+            style={{ 
+                width: imgDims.w,
+                height: imgDims.h,
+                transform: `scale(${visualScale})`,
+                transformOrigin: 'top left',
+                left: 0,
+                top: 0
+            }}
+          >
+              {layersToRender.map(layer => {
+                  const variationSettings = getFontVariationSettings(layer);
+                  // We deliberately DO NOT use constructCanvasFont here to prevent the 'font' shorthand
+                  // from resetting our custom font-variation-settings.
+                  
+                  const xPct = layer.overlayPosition.x;
+                  const yPct = layer.overlayPosition.y;
+                  
+                  const fontSizePx = (layer.textSize / 100) * imgDims.w;
+                  
+                  // Calculate Font Styles explicitely
+                  const fontWeight = layer.fontVariations && layer.fontVariations['wght'] !== undefined 
+                      ? Math.round(layer.fontVariations['wght']) 
+                      : (layer.isBold ? 700 : 400);
+                  
+                  let fontStyle = layer.isItalic ? 'italic' : 'normal';
+                  if (layer.fontVariations && layer.fontVariations['slnt'] !== undefined && layer.fontVariations['slnt'] !== 0) {
+                      fontStyle = `oblique ${Math.abs(layer.fontVariations['slnt'])}deg`;
+                  }
+
+                  const textToRender = layer.isUppercase ? layer.textOverlay.toUpperCase() : layer.textOverlay;
+                  const lines = textToRender.split('\n');
+                  
+                  // Shadow Math
+                  const angleRad = (layer.shadowAngle * Math.PI) / 180;
+                  const shadowDist = (layer.shadowOffset / 100) * fontSizePx;
+                  const sX = shadowDist * Math.cos(angleRad);
+                  const sY = shadowDist * Math.sin(angleRad);
+                  const sBlur = (layer.shadowBlur / 100) * fontSizePx * 2;
+                  const sColor = hexToRgba(layer.shadowColor, layer.shadowOpacity ?? 1);
+
+                  return (
+                      <div 
+                          key={layer.id}
+                          style={{
+                              position: 'absolute',
+                              left: `${xPct}%`,
+                              top: `${yPct}%`,
+                              transform: `translate(-50%, -50%) rotate(${layer.rotation}deg) scale(${layer.flipX ? -1 : 1}, ${layer.flipY ? -1 : 1})`,
+                              transformOrigin: 'center center',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: layer.textAlign === 'center' ? 'center' : layer.textAlign === 'right' ? 'flex-end' : 'flex-start',
+                              minWidth: '10px',
+                              textAlign: layer.textAlign,
+                              
+                              // Explicit Font Properties (Avoiding shorthand to preserve variable axes)
+                              fontFamily: `"${layer.fontFamily}"`,
+                              fontSize: `${fontSizePx}px`,
+                              fontWeight: fontWeight,
+                              fontStyle: fontStyle,
+                              fontVariationSettings: variationSettings,
+
+                              color: layer.textColor,
+                              lineHeight: 1.0,
+                              letterSpacing: `${layer.letterSpacing * (fontSizePx/50)}px`,
+                              
+                              // Consistent Text Rendering
+                              fontSynthesis: 'none',
+                              WebkitFontSmoothing: 'antialiased',
+                              MozOsxFontSmoothing: 'grayscale',
+                              
+                              // Correct Shadow Implementation for CSS Text
+                              textShadow: layer.hasShadow 
+                                  ? `${sX}px ${sY}px ${sBlur}px ${sColor}`
+                                  : 'none',
+                              
+                              // Special Effects (Simple CSS Mappings)
+                              ...(layer.hasOutline ? {
+                                  WebkitTextStroke: `${layer.outlineWidth}px ${layer.outlineColor}`,
+                              } : {}),
+                              ...(layer.isHollow ? {
+                                  color: 'transparent',
+                                  WebkitTextStroke: `${layer.hasOutline ? layer.outlineWidth : 2}px ${layer.hasOutline ? layer.outlineColor : layer.textColor}`
+                              } : {}),
+                              opacity: layer.opacity,
+                              mixBlendMode: layer.blendMode === 'normal' ? 'normal' : layer.blendMode as any,
+                              zIndex: design.layers.findIndex(l => l.id === layer.id) // Respect layering
+                          }}
+                      >
+                          {lines.map((line, i) => (
+                              <div key={i} style={{ whiteSpace: 'pre', display: 'block' }}>
+                                  {line.split('').map((char, j) => (
+                                      <span key={j} style={{ 
+                                          display: 'inline-block',
+                                          transform: layer.letterRotation !== 0 ? `rotate(${layer.letterRotation}deg)` : 'none'
+                                      }}>
+                                          {char === ' ' ? '\u00A0' : char}
+                                      </span>
+                                  ))}
+                              </div>
+                          ))}
+                      </div>
+                  );
+              })}
+          </div>
+      );
+  };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault(); 
@@ -1065,13 +1243,10 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                     const name = urlPath.substring(urlPath.lastIndexOf('/') + 1);
                     if (name) filename = name;
                 } catch (e) {
-                    // ignore URL parsing errors
                 }
-                
                 if (blob.type === 'image/webp' && !filename.endsWith('.webp')) filename += '.webp';
                 else if (blob.type === 'image/png' && !filename.endsWith('.png')) filename += '.png';
                 else if (blob.type === 'image/jpeg' && !filename.endsWith('.jpg')) filename += '.jpg';
-
                 const file = new File([blob], filename, { type: blob.type });
                 onImageUpload(file);
             }
@@ -1085,77 +1260,49 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
     e.stopPropagation(); 
     setIsDraggingFile(false);
 
-    // 1. Check for dropped files (Local File System)
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
         const file = e.dataTransfer.files[0];
-        
-        // SUPPORT: Images
         if (file.type.startsWith('image/')) {
             onImageUpload(file);
             return;
         }
-
-        // SUPPORT: .webloc (macOS)
         if (file.name.endsWith('.webloc')) {
             const reader = new FileReader();
             reader.onload = (ev) => {
                 const content = ev.target?.result as string;
-                // Robust parsing for Apple's Property List format
-                // Matches <key>URL</key> followed immediately by <string>...url...</string>
-                // Handles potential whitespace/newlines between tags
                 const match = content.match(/<key>URL<\/key>\s*<string>(.*?)<\/string>/s);
                 if (match && match[1]) {
                     loadUrlImage(match[1]);
                 } else {
-                    // Fallback: Try a looser match if the XML structure is non-standard
                     const looseMatch = content.match(/<string>(https?:\/\/[^<]+)<\/string>/);
-                    if (looseMatch && looseMatch[1]) {
-                        loadUrlImage(looseMatch[1]);
-                    }
+                    if (looseMatch && looseMatch[1]) loadUrlImage(looseMatch[1]);
                 }
             };
             reader.readAsText(file);
             return;
         }
-
-        // SUPPORT: .url (Windows)
         if (file.name.endsWith('.url')) {
              const reader = new FileReader();
              reader.onload = (ev) => {
                  const content = ev.target?.result as string;
-                 // Parse INI style: URL=http...
-                 // Matches URL= followed by the rest of the line
                  const match = content.match(/URL=(.*)/);
-                 if (match && match[1]) {
-                     loadUrlImage(match[1].trim());
-                 }
+                 if (match && match[1]) loadUrlImage(match[1].trim());
              };
              reader.readAsText(file);
              return;
         }
-
         return;
     }
-
-    // 2. Check for dropped URLs (Web Images, Links, Text)
-    // Priority handling for images dragged from other browser windows and text URLs
     const uriList = e.dataTransfer.getData('text/uri-list');
     const html = e.dataTransfer.getData('text/html');
     const plainText = e.dataTransfer.getData('text/plain');
-
     let imageUrl = '';
-
-    // Priority 1: Try to extract image source from HTML (Best for dragging images from other pages)
     if (html) {
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
         const img = doc.querySelector('img');
-        if (img && img.src) {
-            imageUrl = img.src;
-        }
+        if (img && img.src) imageUrl = img.src;
     }
-
-    // Priority 2: URI List (Standard URL drag or Link drag)
     if (!imageUrl && uriList) {
         const lines = uriList.split(/\r?\n/);
         for (const line of lines) {
@@ -1165,22 +1312,13 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
             }
         }
     }
-
-    // Priority 3: Plain Text (Dragging selected URL text)
     if (!imageUrl && plainText) {
         const trimmed = plainText.trim();
-        // Simple check if it looks like a web URL
-        if (trimmed.match(/^https?:\/\//i)) {
-            imageUrl = trimmed;
-        }
+        if (trimmed.match(/^https?:\/\//i)) imageUrl = trimmed;
     }
-
-    if (imageUrl) {
-        loadUrlImage(imageUrl);
-    }
+    if (imageUrl) loadUrlImage(imageUrl);
   };
 
-  // Helper for sizing logic
   const getEmptyStateStyle = () => {
     if (imageSrc && imgDims) {
         return {
@@ -1189,27 +1327,17 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
             transformOrigin: 'center center'
         };
     }
-
     const [wStr, hStr] = design.aspectRatio.split(':');
     let w = parseFloat(wStr);
     let h = parseFloat(hStr);
-    
-    if (design.orientation === 'portrait') {
-       const temp = w; w = h; h = temp;
-    }
-    
+    if (design.orientation === 'portrait') { const temp = w; w = h; h = temp; }
     const numericRatio = w / h;
     const isPortrait = design.orientation === 'portrait';
     const SHORT_EDGE_SIZE = '28rem'; 
-
     let calculatedWidthConstraint;
-    if (isPortrait) {
-        calculatedWidthConstraint = SHORT_EDGE_SIZE;
-    } else {
-        calculatedWidthConstraint = `calc(${SHORT_EDGE_SIZE} * ${numericRatio})`;
-    }
+    if (isPortrait) calculatedWidthConstraint = SHORT_EDGE_SIZE;
+    else calculatedWidthConstraint = `calc(${SHORT_EDGE_SIZE} * ${numericRatio})`;
     const heightBasedWidthConstraint = `calc(80vh * ${numericRatio})`;
-
     return {
         width: `min(90%, ${calculatedWidthConstraint}, ${heightBasedWidthConstraint})`,
         aspectRatio: `${numericRatio}`,
@@ -1219,45 +1347,34 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
   };
 
   const getContainerClass = () => {
-      if (imageSrc) {
-          return 'w-auto h-auto max-w-full max-h-full';
-      }
+      if (imageSrc) return 'w-auto h-auto max-w-full max-h-full';
       return 'shadow-2xl'; 
   };
   
-  // Cursor logic
   let cursorStyle = 'default';
   if (activeLayer?.isPathInputMode) cursorStyle = 'crosshair';
   else if (activeLayer?.isPathMoveMode) cursorStyle = 'move';
   else if (interactionMode === 'GIZMO_ROTATE') cursorStyle = 'grabbing';
   else if (interactionMode === 'GIZMO_SCALE') {
-      if (activeGizmoHandle === 'tr' || activeGizmoHandle === 'bl') {
-           cursorStyle = 'nesw-resize';
-      } else {
-           cursorStyle = 'nwse-resize';
-      }
+      if (activeGizmoHandle === 'tr' || activeGizmoHandle === 'bl') cursorStyle = 'nesw-resize';
+      else cursorStyle = 'nwse-resize';
   }
   else if (interactionMode === 'GIZMO_MOVE') cursorStyle = 'move';
   else if (interactionMode === 'PAN') cursorStyle = 'grabbing';
   else if (imageSrc) cursorStyle = 'grab';
 
-  // --- Dynamic Styling for Gizmo ---
   const invScale = 1 / zoomScale;
   const cornerSize = 8 * invScale;
   const cornerOffset = -4 * invScale;
   const boxBorderWidth = 1 * invScale;
-  
   const rotHandleSize = 40 * invScale;
   const rotStemHeight = 32 * invScale;
   const rotHandleOffset = -rotStemHeight; 
 
-  // Gizmo Rendering Logic
   const renderGizmo = (layerId: string, isPrimary: boolean) => {
       const layer = design.layers.find(l => l.id === layerId);
       if (!layer || !imgDims) return null;
-
       let gx = 0, gy = 0, gw = 0, gh = 0, gr = 0;
-      
       if (layer.isPathMoveMode && layer.pathPoints.length > 0) {
           const b = getPathBounds(layer.pathPoints);
           gx = (b.cx / imgDims.w) * 100;
@@ -1267,7 +1384,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
           gr = 0; 
       } else {
           const bounds = textBounds[layerId];
-          if (!bounds) return null; // Not measured yet
+          if (!bounds) return null; 
           gx = layer.overlayPosition.x;
           gy = layer.overlayPosition.y;
           gw = bounds.width * visualScale;
@@ -1282,7 +1399,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                 e.stopPropagation();
                 if (onLayerDoubleClicked) onLayerDoubleClicked(layerId);
             }}
-            className={`absolute pointer-events-none group z-50 ${isPrimary ? 'z-[60]' : 'z-[50]'}`}
+            className={`absolute pointer-events-none group z-[60]`}
             style={{
                 left: `${gx}%`,
                 top: `${gy}%`,
@@ -1291,17 +1408,13 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                 transform: `translate(-50%, -50%) rotate(${gr}deg) scale(${layer.flipX ? -1 : 1}, ${layer.flipY ? -1 : 1})`,
             }}
         >
-            {/* The Bounding Box */}
             <div 
                 data-handle={isPrimary ? "box" : undefined}
                 className={`absolute inset-0 border-dashed ${isPrimary ? 'border-white/60 hover:border-pink-500/80 cursor-move pointer-events-auto' : 'border-white/30'}`}
                 style={{ borderWidth: `${boxBorderWidth}px` }}
             ></div>
-
-            {/* Handles - Only for Primary */}
             {isPrimary && (
                 <>
-                    {/* Scale Handles (Corners) */}
                     {[
                         { id: 'tl', style: { top: `${cornerOffset}px`, left: `${cornerOffset}px` } },
                         { id: 'tr', style: { top: `${cornerOffset}px`, right: `${cornerOffset}px` } },
@@ -1321,8 +1434,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                             }`}
                         />
                     ))}
-
-                    {/* Rotation Stem */}
                     <div 
                         className="absolute left-1/2 -translate-x-1/2 bg-pink-500/50" 
                         style={{
@@ -1332,8 +1443,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                             transform: `translateY(-100%)`
                         }}
                     />
-
-                    {/* Rotation Handle (Lollipop) */}
                     <div 
                         data-handle="rotate"
                         className="absolute left-1/2 bg-white/10 hover:bg-pink-500/20 border-white/50 backdrop-blur-sm flex items-center justify-center pointer-events-auto cursor-grab shadow-lg transition-colors rounded-full"
@@ -1341,7 +1450,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                             width: `${rotHandleSize}px`,
                             height: `${rotHandleSize}px`,
                             top: `${rotHandleOffset}px`,
-                            transform: `translate(-50%, -50%)`, // Center on top of stem
+                            transform: `translate(-50%, -50%)`, 
                             borderWidth: `${1 * invScale}px`
                         }}
                         title="Drag to Rotate"
@@ -1352,8 +1461,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                         />
                         <RotateCw size={20 * invScale} className="text-white absolute opacity-0 hover:opacity-100 pointer-events-none transition-opacity" />
                     </div>
-
-                    {/* Visual Anchor for Position */}
                     <div 
                         className="absolute top-1/2 left-1/2 bg-pink-500 rounded-full -translate-x-1/2 -translate-y-1/2 pointer-events-none opacity-50"
                         style={{ width: `${4 * invScale}px`, height: `${4 * invScale}px` }}
@@ -1414,6 +1521,9 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                         mixBlendMode: (activeLayer?.isPathInputMode || activeLayer?.isPathMoveMode) ? 'normal' : 'normal' 
                     }}
                 />
+
+                {/* DOM OVERLAY FOR ALL TEXT LAYERS */}
+                {renderTextLayersOverlay()}
                 
                 {activeLayer?.isPathInputMode && activeLayer.pathPoints.length === 0 && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
@@ -1430,14 +1540,10 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                 </div>
             </div>
 
-            {/* GIZMO OVERLAYS */}
             {imgDims && design.selectedLayerIds.map(layerId => {
                 const layer = design.layers.find(l => l.id === layerId);
-                // Don't show gizmo if Path Drawing mode is active on ANY layer (cleans up view)
                 if (!layer || layer.isPathInputMode) return null;
-                // Only show path gizmo if Move Mode is active
                 if (layer.pathPoints.length > 0 && !layer.isPathMoveMode) return null;
-
                 const isPrimary = layerId === design.activeLayerId;
                 return renderGizmo(layerId, isPrimary);
             })}
@@ -1456,16 +1562,11 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                   boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
               }}
           >
-             {/* Inner Dark "Film" Area */}
              <div className="w-full h-full bg-neutral-950 relative overflow-hidden flex flex-col items-center justify-center gap-4 border border-neutral-900 shadow-inner">
-                
-                {/* Subtle sheen */}
                 <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none"></div>
-
                 <div className={`relative z-10 p-4 rounded-full bg-neutral-900 border border-neutral-800 shadow-xl transition-all duration-300 ${isDraggingFile ? 'scale-110 border-pink-500/50' : 'group-hover:border-neutral-700'}`}>
                    <Upload className={`w-8 h-8 transition-colors duration-300 ${isDraggingFile ? 'text-pink-500' : 'text-neutral-600 group-hover:text-neutral-400'}`} />
                 </div>
-                
                 <div className="relative z-10 flex flex-col items-center gap-2 text-center">
                     <span className="font-mono text-[10px] tracking-[0.2em] text-neutral-500 uppercase group-hover:text-neutral-300 transition-colors">
                         {isDraggingFile ? 'Drop File' : 'Upload Image'}
@@ -1475,8 +1576,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                     </span>
                 </div>
             </div>
-
-            {/* Handwritten Label */}
             <div className="absolute bottom-0 left-0 right-0 h-20 flex items-center justify-center pointer-events-none">
                  <span 
                     className="text-neutral-800/70 text-xl transform -rotate-2 origin-center"
