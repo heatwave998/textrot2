@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import Canvas, { CanvasHandle } from './components/Canvas';
 import Controls, { ControlsHandle } from './components/Controls';
@@ -212,7 +213,12 @@ export default function App() {
         setGroundingMetadata(previousState.groundingMetadata);
         
         setDesign(prev => {
-            const restoredLayers = previousState.layers.map(l => ({ ...l, pathPoints: [], isPathInputMode: false, isPathMoveMode: false }));
+            const restoredLayers = previousState.layers.map(l => ({ 
+                ...l, 
+                // Restore path points from history, only reset interaction modes
+                isPathInputMode: false, 
+                isPathMoveMode: false 
+            }));
             
             let activeId = prev.activeLayerId;
             if (!restoredLayers.find(l => l.id === activeId)) {
@@ -241,7 +247,12 @@ export default function App() {
           setGroundingMetadata(nextState.groundingMetadata);
           
           setDesign(prev => {
-            const restoredLayers = nextState.layers.map(l => ({ ...l, pathPoints: [], isPathInputMode: false, isPathMoveMode: false }));
+            const restoredLayers = nextState.layers.map(l => ({ 
+                ...l, 
+                // Restore path points from history, only reset interaction modes
+                isPathInputMode: false, 
+                isPathMoveMode: false 
+            }));
             
             let activeId = prev.activeLayerId;
             if (!restoredLayers.find(l => l.id === activeId)) {

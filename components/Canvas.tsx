@@ -243,16 +243,14 @@ const drawLayerToCtx = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: 
     const fontSizePx = (layer.textSize / 100) * width;
     
     // CRITICAL: Apply font variations to the canvas context directly via the canvas element style
-    // This allows the browser to render variable axes (like WONK, SOFT, opsz) that aren't part of standard font string
-    // DO NOT set letterSpacing here as it double-counts with our manual calculation.
     if (ctx.canvas) {
         ctx.canvas.style.fontVariationSettings = getFontVariationSettings(layer);
         ctx.canvas.style.letterSpacing = '0px'; 
     }
 
     ctx.font = constructCanvasFont(layer, fontSizePx);
-    ctx.textBaseline = 'middle'; // Aligns roughly with center of cap height
-    ctx.textAlign = 'center'; // We draw individual chars, so we align them to their calculated center
+    ctx.textBaseline = 'middle'; 
+    ctx.textAlign = 'center'; 
 
     const isPath = layer.pathPoints.length > 0;
     
@@ -295,7 +293,7 @@ const drawLayerToCtx = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: 
              const sX = dist * Math.cos(angleRad);
              const sY = dist * Math.sin(angleRad);
 
-             // FIX: Reduced blur factor significantly to match visual crispness of CSS
+             // Reduced blur factor significantly to match visual crispness of CSS
              const shadowBlurPx = (layer.shadowBlur / 100) * fontSizePx * 0.12;
 
              ctx.filter = `blur(${shadowBlurPx}px)`;
@@ -303,7 +301,6 @@ const drawLayerToCtx = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: 
 
              layout.forEach(item => {
                  ctx.save();
-                 // Apply character transform + shadow offset
                  ctx.translate(item.x + offsetX, item.y + offsetY);
                  ctx.rotate(item.r * Math.PI / 180);
                  ctx.translate(sX, sY);
@@ -321,7 +318,8 @@ const drawLayerToCtx = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: 
         // Setup Fill Style
         let fillStyle: string | CanvasGradient = 'transparent';
         if (layer.specialEffect === 'gradient' && !layer.isHollow && typeof color === 'string') {
-             const angleRad = (layer.effectAngle * Math.PI) / 180;
+             // ADJUSTMENT: Subtract 90 degrees to align Canvas gradient angle (0=Right) with CSS linear-gradient (0=Up)
+             const angleRad = ((layer.effectAngle - 90) * Math.PI) / 180;
              const range = fontSizePx * 5; 
              const x1 = Math.cos(angleRad) * -range;
              const y1 = Math.sin(angleRad) * -range;
@@ -353,12 +351,10 @@ const drawLayerToCtx = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: 
             // FILL/HOLLOW PASS
             if (mode === 'fill-only' || mode === 'standard') {
                 if (layer.isHollow) {
-                    // Hollow Mode: Stroke with Text Color
                     ctx.strokeStyle = typeof color === 'string' ? color : layer.textColor;
                     ctx.lineWidth = Math.max(1, fontSizePx * 0.02); 
                     ctx.strokeText(item.char, 0, 0);
                 } else {
-                    // Normal Fill
                     ctx.fillStyle = fillStyle;
                     ctx.fillText(item.char, 0, 0);
                 }
@@ -371,8 +367,15 @@ const drawLayerToCtx = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: 
     };
 
     // --- Rendering Pipeline ---
+    // Order: Shadow -> Echo -> Glitch -> Main
+    // This ensures Shadow is absolutely at the bottom.
 
-    // 1. Echo Effect (Background Trails)
+    // 1. Shadow Pass
+    if (layer.hasShadow) {
+        renderPass('#000000', 0, 0, 0, 1, 'source-over', 'shadow-only');
+    }
+
+    // 2. Echo Effect (Background Trails)
     if (layer.specialEffect === 'echo') {
         const echoCount = 5;
         const angleRad = (layer.effectAngle * Math.PI) / 180;
@@ -385,17 +388,11 @@ const drawLayerToCtx = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: 
         }
     }
 
-    // 2. Shadow Pass
-    if (layer.hasShadow) {
-        renderPass('#000000', 0, 0, 0, 1, 'source-over', 'shadow-only');
-    }
-
     // 3. Glitch Effects
     if (layer.specialEffect === 'glitch') {
         const offsetBase = (layer.effectIntensity / 100) * (fontSizePx * 0.2);
         const angleRad = (layer.effectAngle * Math.PI) / 180;
         
-        // Use 'screen' for additive light effect, or source-over for standard paint
         const glitchBlend = (!layer.isRainbowGlitch || layer.isRainbowLights) ? 'screen' : 'source-over';
 
         if (layer.isRainbowGlitch) {
@@ -456,7 +453,6 @@ const measureTextLayout = (ctx: CanvasRenderingContext2D, layer: TextLayer, widt
     ctx.font = constructCanvasFont(layer, fontSize);
     
     // Apply variations to context for measurement too!
-    // DO NOT set letterSpacing here as it double-counts with our manual calculation.
     if (ctx.canvas) {
         ctx.canvas.style.fontVariationSettings = getFontVariationSettings(layer);
         ctx.canvas.style.letterSpacing = '0px'; 
@@ -841,17 +837,12 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
           scratchCtx.imageSmoothingEnabled = true;
           scratchCtx.imageSmoothingQuality = 'high';
           
-          // In Preview mode, the DOM Overlay handles all text rendering.
-          // Unless forceUseCanvas is true (e.g., Stamping/Exporting), we skip drawing text here.
           if (isPreview && !forceUseCanvas) {
               // No-op for visual text
           } else {
               // EXPORT MODE or FALLBACK: Use Native Canvas Renderer
-              await document.fonts.ready; // Ensure fonts are ready before drawing
+              await document.fonts.ready;
               
-              // FIX: Variable fonts and CSS properties often don't apply to detached canvas elements.
-              // To fix measurement/rendering discrepancies (text shift, wrong font weight/width),
-              // we temporarily attach the scratch canvas to the hidden DOM so it inherits styles correctly.
               const needsDomAttach = true; 
               let attached = false;
               if (needsDomAttach && !scratch.isConnected) {
@@ -864,9 +855,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
 
               try {
                   const variationSettings = getFontVariationSettings(layer);
-                  // Apply styles to the canvas element itself
                   scratch.style.fontVariationSettings = variationSettings;
-                  // DO NOT set letterSpacing here as it double-counts with our manual calculation.
                   scratch.style.letterSpacing = '0px';
 
                   drawLayerToCtx(scratchCtx, layer, width, height);
@@ -881,7 +870,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
           bufferCtx.save();
           bufferCtx.setTransform(1, 0, 0, 1, 0, 0); 
           
-          bufferCtx.globalAlpha = 1; // opacity handled inside drawLayerToCtx for visual fidelity in layers
+          bufferCtx.globalAlpha = 1; 
           
           const gcoMap: Record<string, GlobalCompositeOperation> = {
               'normal': 'source-over',
@@ -997,13 +986,10 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
   }), [generateExport, stampLayers]);
 
   // --- DOM Overlay Renderer ---
-  // (Maintains current DOM logic for Preview, which is good for WYSIWYG editing)
   const renderTextLayersOverlay = () => {
       if (!imgDims) return null;
 
-      // Filter visible layers
       const layersToRender = design.layers.filter(l => l.visible);
-
       if (layersToRender.length === 0) return null;
 
       return (
@@ -1031,27 +1017,17 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                       fontStyle = `oblique ${Math.abs(layer.fontVariations['slnt'])}deg`;
                   }
 
-                  const shadows: string[] = [];
-                   if (layer.hasShadow) {
+                  // --- SHADOW SETUP (Independent of Text Shadow property for main text) ---
+                  let shadowString = 'none';
+                  if (layer.hasShadow) {
                         const angleRad = (layer.shadowAngle * Math.PI) / 180;
                         const shadowDist = (layer.shadowOffset / 100) * fontSizePx;
                         const sX = shadowDist * Math.cos(angleRad);
                         const sY = shadowDist * Math.sin(angleRad);
-                        const sBlur = (layer.shadowBlur / 100) * fontSizePx * 0.25; // Adjusted to match canvas
+                        const sBlur = (layer.shadowBlur / 100) * fontSizePx * 0.25; 
                         const sColor = hexToRgba(layer.shadowColor, layer.shadowOpacity ?? 1);
-                        shadows.push(`${sX}px ${sY}px ${sBlur}px ${sColor}`);
-                    }
-                    if (layer.specialEffect === 'echo') {
-                        const echoCount = 5;
-                        const angleRad = (layer.effectAngle * Math.PI) / 180;
-                        const distanceStep = layer.effectIntensity * (imgDims.w * 0.0005); 
-                        for (let i = 1; i <= echoCount; i++) {
-                            const dx = Math.cos(angleRad) * distanceStep * i;
-                            const dy = Math.sin(angleRad) * distanceStep * i;
-                            const alpha = 0.5 * (1 - i/echoCount);
-                            shadows.push(`${dx}px ${dy}px 0px ${hexToRgba(layer.textColor, alpha)}`);
-                        }
-                    }
+                        shadowString = `${sX}px ${sY}px ${sBlur}px ${sColor}`;
+                  }
 
                   // Base container style
                   const baseStyle: React.CSSProperties = {
@@ -1069,13 +1045,11 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                       opacity: layer.opacity,
                       mixBlendMode: layer.blendMode === 'normal' ? 'normal' : layer.blendMode as any,
                       zIndex: design.layers.findIndex(l => l.id === layer.id) * 10,
-                      textShadow: shadows.join(', ') || 'none',
+                      textShadow: 'none', // We manage this manually
                   };
 
                   // --- CONTENT RENDERER ---
-                  // mode: 'outline' | 'fill'
                   const renderContent = (mode: 'outline' | 'fill', extraStyle?: React.CSSProperties) => {
-                      // Common Styles
                       const modeStyle: React.CSSProperties = {
                            ...baseStyle,
                            ...extraStyle
@@ -1085,11 +1059,11 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                           if (!layer.hasOutline) return null;
                           modeStyle.color = 'transparent';
                           modeStyle.WebkitTextStroke = `${layer.outlineWidth}px ${layer.outlineColor}`;
-                          modeStyle.textShadow = 'none'; // Outlines usually don't have the shadow (Shadow pass handles it)
+                          modeStyle.textShadow = 'none'; 
                       } 
                       else if (mode === 'fill') {
-                           // FIX: Check if color was explicitly overridden (e.g. by Glitch effect) before applying base colors
                            const hasExplicitColor = extraStyle && 'color' in extraStyle;
+                           const hasExplicitShadow = extraStyle && 'textShadow' in extraStyle;
                            
                            if (!hasExplicitColor) {
                                 if (layer.isHollow) {
@@ -1105,6 +1079,13 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                                         }
                                 }
                            }
+                           
+                           // If shadow is explicitly provided (e.g. Shadow Pass), use it.
+                           // Otherwise, keep it 'none' from baseStyle unless main pass needs it?
+                           // Actually, we use a separate pass for shadow, so Main pass should have 'none'.
+                           if (hasExplicitShadow) {
+                               modeStyle.textShadow = extraStyle.textShadow;
+                           }
                       }
 
                       // --- PATH TEXT ---
@@ -1112,7 +1093,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                           const ctx = textCanvasRef.current?.getContext('2d');
                           if (!ctx) return null;
                           
-                          // CRITICAL: Set the font on the context so measurement matches visual render!
                           ctx.font = constructCanvasFont(layer, fontSizePx);
                           if (ctx.canvas) {
                               ctx.canvas.style.fontVariationSettings = variationSettings;
@@ -1182,24 +1162,76 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                       );
                   };
 
-                  // --- GLITCH COMPOSITOR ---
-                  if (layer.specialEffect === 'glitch') {
+                  // --- RENDER PASSES ---
+                  // 1. Shadow Layer
+                  // 2. Echo Layer
+                  // 3. Glitch Layer
+                  // 4. Main Layer
+
+                  const renderShadow = () => {
+                      if (!layer.hasShadow) return null;
+                      return renderContent('fill', {
+                          color: 'transparent',
+                          WebkitTextFillColor: 'transparent',
+                          WebkitTextStroke: '0px transparent',
+                          backgroundImage: 'none',
+                          textShadow: shadowString,
+                          zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 1,
+                          mixBlendMode: 'normal'
+                      });
+                  }
+
+                  const renderEchoes = () => {
+                      if (layer.specialEffect !== 'echo') return null;
+                      const echoCount = 5;
+                      const angleRad = (layer.effectAngle * Math.PI) / 180;
+                      const distanceStep = layer.effectIntensity * (imgDims.w * 0.0005);
+                      
+                      const echoes = [];
+                      for (let i = echoCount; i >= 1; i--) {
+                            const dx = Math.cos(angleRad) * distanceStep * i;
+                            const dy = Math.sin(angleRad) * distanceStep * i;
+                            const alpha = 0.5 * (1 - i/echoCount);
+                            
+                            echoes.push(
+                                <React.Fragment key={`echo-${i}`}>
+                                {renderContent('fill', {
+                                    // Apply transform translation in Local Space (same as Canvas)
+                                    // This means rotation happens first, then translation.
+                                    transform: layer.pathPoints.length > 0 
+                                       ? `translate(${dx}px, ${dy}px)` 
+                                       : `translate(-50%, -50%) rotate(${layer.rotation}deg) scale(${layer.flipX ? -1 : 1}, ${layer.flipY ? -1 : 1}) translate(${dx}px, ${dy}px)`,
+                                    color: layer.textColor,
+                                    opacity: alpha * layer.opacity,
+                                    textShadow: 'none', 
+                                    zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 2,
+                                    pointerEvents: 'none',
+                                    mixBlendMode: 'normal'
+                                })}
+                                </React.Fragment>
+                            );
+                      }
+                      return <>{echoes}</>;
+                  }
+
+                  const renderGlitch = () => {
+                      if (layer.specialEffect !== 'glitch') return null;
+                      
                       const offsetBase = (layer.effectIntensity / 100) * (fontSizePx * 0.2);
                       const angleRad = (layer.effectAngle * Math.PI) / 180;
-                      
+                      const glitchBlend = (!layer.isRainbowGlitch || layer.isRainbowLights) ? 'screen' as const : 'normal' as const;
+
                       const cloneResetStyle = {
                           textShadow: 'none',
                           WebkitTextStroke: '0px transparent', 
                           WebkitTextFillColor: 'currentColor', 
                           backgroundImage: 'none', 
-                          mixBlendMode: (!layer.isRainbowGlitch || layer.isRainbowLights) ? 'screen' as const : 'normal' as const
+                          mixBlendMode: glitchBlend
                       };
 
-                      const renderClones = () => {
-                        if (layer.isRainbowGlitch) {
+                      if (layer.isRainbowGlitch) {
                             const rainbowColors = ['#ff0000', '#ffa500', '#ffff00', '#00ff00', '#00ffff', '#0000ff', '#8f00ff', '#4b0082'];
                             const spreadFactor = 3.0;
-                            
                             return (
                                 <>
                                     {rainbowColors.map((color, i) => {
@@ -1213,9 +1245,9 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                                             {renderContent('fill', {
                                                 transform: layer.pathPoints.length > 0 
                                                 ? `translate(${dx}px, ${dy}px)` 
-                                                : `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) rotate(${layer.rotation}deg) scale(${layer.flipX ? -1 : 1}, ${layer.flipY ? -1 : 1})`,
+                                                : `translate(-50%, -50%) rotate(${layer.rotation}deg) scale(${layer.flipX ? -1 : 1}, ${layer.flipY ? -1 : 1}) translate(${dx}px, ${dy}px)`,
                                                 color: color,
-                                                zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 2, 
+                                                zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 3, 
                                                 opacity: layer.rainbowOpacity,
                                                 filter: `blur(${layer.rainbowBlur}px)`,
                                                 pointerEvents: 'none',
@@ -1227,30 +1259,27 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                                 </>
                             );
                         } else {
-                            // STANDARD MODE: 2 Clones (Red/Blue)
                             const dx = Math.cos(angleRad) * offsetBase;
                             const dy = Math.sin(angleRad) * offsetBase;
-                            
                             return (
                                 <>
                                     {renderContent('fill', {
                                         transform: layer.pathPoints.length > 0 
                                            ? `translate(${-dx}px, ${-dy}px)` 
-                                           : `translate(calc(-50% - ${dx}px), calc(-50% - ${dy}px)) rotate(${layer.rotation}deg) scale(${layer.flipX ? -1 : 1}, ${layer.flipY ? -1 : 1})`,
+                                           : `translate(-50%, -50%) rotate(${layer.rotation}deg) scale(${layer.flipX ? -1 : 1}, ${layer.flipY ? -1 : 1}) translate(${-dx}px, ${-dy}px)`,
                                         color: layer.effectColor,
-                                        zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 2,
+                                        zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 3,
                                         opacity: 1,
                                         filter: 'blur(1px)',
                                         pointerEvents: 'none',
                                         ...cloneResetStyle
                                     })}
-
                                     {renderContent('fill', {
                                         transform: layer.pathPoints.length > 0 
                                            ? `translate(${dx}px, ${dy}px)` 
-                                           : `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) rotate(${layer.rotation}deg) scale(${layer.flipX ? -1 : 1}, ${layer.flipY ? -1 : 1})`,
+                                           : `translate(-50%, -50%) rotate(${layer.rotation}deg) scale(${layer.flipX ? -1 : 1}, ${layer.flipY ? -1 : 1}) translate(${dx}px, ${dy}px)`,
                                         color: layer.effectColor2,
-                                        zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 2,
+                                        zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 3,
                                         opacity: 1,
                                         filter: 'blur(1px)',
                                         pointerEvents: 'none',
@@ -1259,39 +1288,17 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                                 </>
                             );
                         }
-                      };
-
-                      return (
-                          <React.Fragment key={layer.id}>
-                                {/* 1. Shadow Pass (Bottom) - Using invisible fill */}
-                                {layer.hasShadow && renderContent('fill', {
-                                    color: 'transparent',
-                                    WebkitTextFillColor: 'transparent',
-                                    WebkitTextStroke: '0px transparent',
-                                    backgroundImage: 'none',
-                                    zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 1,
-                                    mixBlendMode: 'normal'
-                                })}
-
-                                {/* 2. Clones (Middle) */}
-                                {renderClones()}
-
-                                {/* 3. Main Channel (Top) - Split into Outline and Fill */}
-                                {renderContent('outline', { zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 3, textShadow: 'none' })}
-                                {renderContent('fill', { zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 3, textShadow: 'none' })}
-                          </React.Fragment>
-                      );
                   }
 
-                  // Normal Render: Shadow -> Outline -> Fill
                   return (
                     <React.Fragment key={layer.id}>
-                        {/* Shadow is inherent in baseStyle via textShadow property */}
-                        {/* Pass 1: Outline (if exists) */}
-                        {layer.hasOutline && renderContent('outline', { zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 1 })}
+                        {renderShadow()}
+                        {renderEchoes()}
+                        {renderGlitch()}
                         
-                        {/* Pass 2: Fill / Hollow (on top) */}
-                        {renderContent('fill', { zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 2 })}
+                        {/* Main Layer */}
+                        {layer.hasOutline && renderContent('outline', { zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 4 })}
+                        {renderContent('fill', { zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 4 })}
                     </React.Fragment>
                   );
               })}
