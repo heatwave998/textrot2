@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Search, Type, Sliders } from 'lucide-react';
 import { FontFamily } from '../types';
 import { FONTS, FONT_CATEGORIES, getFontCategory, VARIABLE_FONTS } from '../constants';
@@ -32,8 +33,8 @@ const FontBookModal: React.FC<FontBookModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-8">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8">
       {/* Backdrop */}
       <div 
         className="absolute inset-0 bg-black/80 backdrop-blur-md transition-opacity duration-300"
@@ -157,7 +158,8 @@ const FontBookModal: React.FC<FontBookModalProps> = ({
         </div>
 
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 

@@ -126,14 +126,16 @@ const calculateStandardLayout = (ctx: CanvasRenderingContext2D, layer: TextLayer
         const chars = line.split('');
         chars.forEach((char, i) => {
              width += ctx.measureText(char).width;
-             if (i < chars.length - 1) width += scaledLetterSpacing;
+             // CSS usually includes trailing spacing in centered block calculations
+             width += scaledLetterSpacing; 
         });
         return { line, width, chars };
     });
     
     const totalHeight = lines.length * lineHeight;
     // Align so that (0,0) is the center of the text block
-    const startY = -(totalHeight / 2) + (lineHeight / 2); 
+    // Using TOP baseline alignment logic for calculations to match CSS box model
+    const startY = -(totalHeight / 2); 
     const maxLineWidth = Math.max(...lineMetrics.map(m => m.width));
     
     lineMetrics.forEach((metric, lineIdx) => {
@@ -154,11 +156,22 @@ const calculateStandardLayout = (ctx: CanvasRenderingContext2D, layer: TextLayer
         metric.chars.forEach(char => {
              const w = ctx.measureText(char).width;
              // Draw at center of char for accurate rotation
-             const charCenterX = cursorX + w / 2;
+             // Since we use TextBaseline TOP, Y is the top of the line.
+             // We want the char box to rotate around its center.
+             // Visual center of char box is cursorX + w/2 (plus half spacing?)
+             // CSS includes spacing in the box. 
+             // Center of the box [Char | Space] is (w + spacing)/2
+             
+             const boxWidth = w + scaledLetterSpacing;
+             const charCenterX = cursorX + (boxWidth / 2) - (scaledLetterSpacing / 2); // Center of the glyph itself
+             
+             // For Y, we need center of the line height
+             const charCenterY = lineY + (lineHeight / 2);
+
              layout.push({
                  char,
                  x: charCenterX,
-                 y: lineY,
+                 y: charCenterY,
                  r: layer.letterRotation
              });
              cursorX += w + scaledLetterSpacing;
@@ -249,7 +262,7 @@ const drawLayerToCtx = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: 
     }
 
     ctx.font = constructCanvasFont(layer, fontSizePx);
-    ctx.textBaseline = 'middle'; 
+    ctx.textBaseline = 'middle'; // Center in the glyph box for rotation
     ctx.textAlign = 'center'; 
 
     const isPath = layer.pathPoints.length > 0;
@@ -294,7 +307,7 @@ const drawLayerToCtx = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: 
              const sY = dist * Math.sin(angleRad);
 
              // Reduced blur factor significantly to match visual crispness of CSS
-             const shadowBlurPx = (layer.shadowBlur / 100) * fontSizePx * 0.12;
+             const shadowBlurPx = (layer.shadowBlur / 100) * fontSizePx * 0.5;
 
              ctx.filter = `blur(${shadowBlurPx}px)`;
              ctx.fillStyle = hexToRgba(layer.shadowColor, layer.shadowOpacity ?? 1);
@@ -437,7 +450,8 @@ const measureLineMetrics = (ctx: CanvasRenderingContext2D, text: string, letterS
         if (charInkLeft < minX) minX = charInkLeft;
         if (charInkRight > maxX) maxX = charInkRight;
         
-        currentX += metrics.width + (i < chars.length - 1 ? letterSpacing : 0);
+        // Match width calculation to standard layout (include spacing)
+        currentX += metrics.width + letterSpacing;
     });
 
     return {
@@ -1024,7 +1038,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                         const shadowDist = (layer.shadowOffset / 100) * fontSizePx;
                         const sX = shadowDist * Math.cos(angleRad);
                         const sY = shadowDist * Math.sin(angleRad);
-                        const sBlur = (layer.shadowBlur / 100) * fontSizePx * 0.25; 
+                        const sBlur = (layer.shadowBlur / 100) * fontSizePx * 0.5; 
                         const sColor = hexToRgba(layer.shadowColor, layer.shadowOpacity ?? 1);
                         shadowString = `${sX}px ${sY}px ${sBlur}px ${sColor}`;
                   }
@@ -1102,7 +1116,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                           const layout = calculatePathLayout(ctx, layer, fontSizePx);
                           
                           return (
-                              <div style={{ ...modeStyle, width: '100%', height: '100%', left: 0, top: 0 }}>
+                              <div style={{ ...modeStyle, width: '100%', height: '100%', left: 0, top: 0, letterSpacing: '0px' }}>
                                   {layout.map((item, i) => (
                                       <div 
                                         key={i}
@@ -1111,7 +1125,8 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                                             left: `${item.x}px`,
                                             top: `${item.y}px`,
                                             transform: `translate(-50%, -50%) rotate(${item.r}deg)`,
-                                            whiteSpace: 'pre'
+                                            whiteSpace: 'pre',
+                                            letterSpacing: '0px' // Force reset spacing for path characters
                                         }}
                                       >
                                           {item.char === ' ' ? '\u00A0' : item.char}
