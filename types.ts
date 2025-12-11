@@ -202,4 +202,7 @@ export interface AppSettings {
   googleApiKey: string;
   imageModel: GenModel;
   imageResolution: ImageResolution;
+  quality: string;
+  generationSystemPrompt: string;
+  editingSystemPrompt: string;
 }

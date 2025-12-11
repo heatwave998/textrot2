@@ -1,8 +1,3 @@
-
-
-
-
-
 import React, { useState, useRef, useEffect } from 'react';
 import Canvas, { CanvasHandle } from './components/Canvas';
 import Controls, { ControlsHandle } from './components/Controls';
@@ -88,7 +83,10 @@ const DEFAULT_SETTINGS: AppSettings = {
   enableZoom: true,
   googleApiKey: '',
   imageModel: 'gemini-3-pro-image-preview',
-  imageResolution: '1K'
+  imageResolution: '1K',
+  quality: 'Photorealistic, 8k, highly detailed',
+  generationSystemPrompt: 'Cinematic lighting, negative space for text overlay, polished design aesthetic.',
+  editingSystemPrompt: 'Maintain photorealism.'
 };
 
 interface ImageHistoryItem {
@@ -96,6 +94,7 @@ interface ImageHistoryItem {
   aspectRatio: AspectRatio;
   orientation: Orientation;
   layers: TextLayer[];
+  groundingMetadata?: any;
 }
 
 export default function App() {
@@ -119,6 +118,7 @@ export default function App() {
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [imageHistory, setImageHistory] = useState<ImageHistoryItem[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
+  const [groundingMetadata, setGroundingMetadata] = useState<any>(null);
 
   // Loading & Abort State
   const [isGenerating, setIsGenerating] = useState(false); // API call status
@@ -185,8 +185,8 @@ export default function App() {
   };
 
   // --- History Management ---
-  const addToHistory = (newImageSrc: string, ratio: AspectRatio, orientation: Orientation, layers: TextLayer[]) => {
-    const newItem: ImageHistoryItem = { src: newImageSrc, aspectRatio: ratio, orientation, layers };
+  const addToHistory = (newImageSrc: string, ratio: AspectRatio, orientation: Orientation, layers: TextLayer[], metadata?: any) => {
+    const newItem: ImageHistoryItem = { src: newImageSrc, aspectRatio: ratio, orientation, layers, groundingMetadata: metadata };
     
     const currentHistory = imageHistory.slice(0, historyIndex + 1);
     const newHistory = [...currentHistory, newItem];
@@ -199,6 +199,7 @@ export default function App() {
     setHistoryIndex(newHistory.length - 1);
     
     setImageSrc(newImageSrc);
+    setGroundingMetadata(metadata);
   };
 
   const handleUndo = () => {
@@ -208,6 +209,7 @@ export default function App() {
         
         setHistoryIndex(newIndex);
         setImageSrc(previousState.src);
+        setGroundingMetadata(previousState.groundingMetadata);
         
         setDesign(prev => {
             const restoredLayers = previousState.layers.map(l => ({ ...l, pathPoints: [], isPathInputMode: false, isPathMoveMode: false }));
@@ -236,6 +238,7 @@ export default function App() {
           
           setHistoryIndex(newIndex);
           setImageSrc(nextState.src);
+          setGroundingMetadata(nextState.groundingMetadata);
           
           setDesign(prev => {
             const restoredLayers = nextState.layers.map(l => ({ ...l, pathPoints: [], isPathInputMode: false, isPathMoveMode: false }));
@@ -282,18 +285,21 @@ export default function App() {
     const signal = abortControllerRef.current.signal;
 
     try {
-      const imagePromise = generateBackgroundImage(
+      const result = await generateBackgroundImage(
           design.prompt, 
           design.aspectRatio, 
           design.orientation, 
           settings.googleApiKey,
           settings.imageModel,
           settings.imageResolution,
+          settings.quality,
+          settings.generationSystemPrompt,
           signal,
           (msg) => log(msg)
       );
       
-      const imgData = await imagePromise;
+      const { imageData, groundingMetadata } = result;
+      
       log("Image data received. Processing...");
       
       const newLayers = design.layers.map(l => ({
@@ -304,7 +310,7 @@ export default function App() {
         isPathMoveMode: false,
       }));
 
-      addToHistory(imgData, design.aspectRatio, design.orientation, newLayers);
+      addToHistory(imageData, design.aspectRatio, design.orientation, newLayers, groundingMetadata);
       
       setDesign(prev => ({
         ...prev,
@@ -351,7 +357,7 @@ export default function App() {
       const signal = abortControllerRef.current.signal;
 
       try {
-          const editedImgData = await editImage(
+          const result = await editImage(
               imageSrc, 
               design.prompt, 
               design.aspectRatio, 
@@ -359,11 +365,16 @@ export default function App() {
               settings.googleApiKey,
               settings.imageModel,
               settings.imageResolution,
+              settings.quality,
+              settings.editingSystemPrompt,
               signal,
               (msg) => log(msg)
           );
+          
+          const { imageData, groundingMetadata } = result;
+
           log("Response received. Updating canvas...");
-          addToHistory(editedImgData, design.aspectRatio, design.orientation, design.layers);
+          addToHistory(imageData, design.aspectRatio, design.orientation, design.layers, groundingMetadata);
           log("Edit complete.");
           
           setIsGenerating(false);
@@ -416,7 +427,7 @@ export default function App() {
     const newId = crypto.randomUUID();
     const newLayers = [createLayer(newId, 'BLANK CANVAS')];
     
-    addToHistory(blankImgData, design.aspectRatio, design.orientation, newLayers);
+    addToHistory(blankImgData, design.aspectRatio, design.orientation, newLayers, null);
     
     setDesign(prev => ({
         ...prev,
@@ -480,7 +491,7 @@ export default function App() {
 
             const cleanLayers = design.layers.map(l => ({ ...l, pathPoints: [], isPathInputMode: false, isPathMoveMode: false }));
             
-            addToHistory(result, closestRatio, newOrientation, cleanLayers);
+            addToHistory(result, closestRatio, newOrientation, cleanLayers, null);
             
             setDesign(prev => ({
                 ...prev,
@@ -563,7 +574,8 @@ export default function App() {
                   src: newImageSrc,
                   aspectRatio: design.aspectRatio,
                   orientation: design.orientation,
-                  layers: remainingLayers
+                  layers: remainingLayers,
+                  groundingMetadata // Preserve metadata through stamping
               };
               
               const newHistory = [...historyUpToNow, newItem];
@@ -680,6 +692,7 @@ export default function App() {
           vibeReasoning={null}
           hasImage={!!imageSrc}
           onError={handleApiError}
+          groundingMetadata={groundingMetadata}
         />
       </div>
 

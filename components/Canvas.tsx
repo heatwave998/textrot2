@@ -1,3 +1,4 @@
+
 import React, { useRef, useState, forwardRef, useImperativeHandle, useEffect, useCallback, useLayoutEffect } from 'react';
 import { DesignState, Point, TextLayer } from '../types';
 import { Upload, Maximize2, PenTool, RotateCw, Move as MoveIcon } from 'lucide-react';
@@ -82,6 +83,8 @@ const getPathBounds = (points: Point[]) => {
 
 const constructCanvasFont = (layer: TextLayer, fontSizePx: number): string => {
     const fontFamily = `"${layer.fontFamily}"`;
+    // Canvas font strings handle weight/style, but standard axes support varies.
+    // We construct the basic descriptors here.
     let weight = layer.isBold ? 700 : 400;
     if (layer.fontVariations && layer.fontVariations['wght'] !== undefined) {
         weight = Math.round(layer.fontVariations['wght']);
@@ -129,7 +132,8 @@ const calculateStandardLayout = (ctx: CanvasRenderingContext2D, layer: TextLayer
     });
     
     const totalHeight = lines.length * lineHeight;
-    const startY = -(totalHeight / 2) + (lineHeight / 2); // Center vertically around origin
+    // Align so that (0,0) is the center of the text block
+    const startY = -(totalHeight / 2) + (lineHeight / 2); 
     const maxLineWidth = Math.max(...lineMetrics.map(m => m.width));
     
     lineMetrics.forEach((metric, lineIdx) => {
@@ -237,9 +241,18 @@ const calculatePathLayout = (ctx: CanvasRenderingContext2D, layer: TextLayer, fo
 // --- Core Canvas Renderer ---
 const drawLayerToCtx = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: number, height: number) => {
     const fontSizePx = (layer.textSize / 100) * width;
+    
+    // CRITICAL: Apply font variations to the canvas context directly via the canvas element style
+    // This allows the browser to render variable axes (like WONK, SOFT, opsz) that aren't part of standard font string
+    // DO NOT set letterSpacing here as it double-counts with our manual calculation.
+    if (ctx.canvas) {
+        ctx.canvas.style.fontVariationSettings = getFontVariationSettings(layer);
+        ctx.canvas.style.letterSpacing = '0px'; 
+    }
+
     ctx.font = constructCanvasFont(layer, fontSizePx);
-    ctx.textBaseline = 'middle';
-    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle'; // Aligns roughly with center of cap height
+    ctx.textAlign = 'center'; // We draw individual chars, so we align them to their calculated center
 
     const isPath = layer.pathPoints.length > 0;
     
@@ -258,7 +271,7 @@ const drawLayerToCtx = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: 
         blurPx: number, 
         opacity: number, 
         compositeOp: GlobalCompositeOperation, 
-        mode: 'fill' | 'stroke' | 'shadow-only'
+        mode: 'standard' | 'shadow-only' | 'outline-only' | 'fill-only'
     ) => {
         ctx.save();
         
@@ -271,84 +284,86 @@ const drawLayerToCtx = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: 
             ctx.scale(layer.flipX ? -1 : 1, layer.flipY ? -1 : 1);
         }
 
-        // Apply visual properties
-        ctx.globalAlpha = opacity * layer.opacity; // Combine layer opacity with pass opacity
+        ctx.globalAlpha = opacity * layer.opacity;
         ctx.globalCompositeOperation = compositeOp;
-        
-        if (blurPx > 0) ctx.filter = `blur(${blurPx}px)`;
-        
+
+        // --- SHADOW PASS ---
         if (mode === 'shadow-only') {
-             if (layer.hasShadow) {
-                 const angleRad = (layer.shadowAngle * Math.PI) / 180;
-                 const dist = (layer.shadowOffset / 100) * fontSizePx;
-                 const sX = dist * Math.cos(angleRad);
-                 const sY = dist * Math.sin(angleRad);
-                 ctx.shadowColor = hexToRgba(layer.shadowColor, layer.shadowOpacity ?? 1);
-                 ctx.shadowBlur = (layer.shadowBlur / 100) * fontSizePx * 2;
-                 ctx.shadowOffsetX = sX;
-                 ctx.shadowOffsetY = sY;
-                 // We draw transparent text to cast shadow
-                 ctx.fillStyle = 'rgba(0,0,0,0)'; 
-             } else {
-                 ctx.restore();
-                 return;
-             }
-        } else {
-             // Gradient Logic
-             if (layer.specialEffect === 'gradient' && !layer.isHollow && typeof color === 'string') {
-                 // Calculate Gradient Bounds relative to drawing context
-                 // For simplified gradient, we can just use the canvas dimensions or a fixed range relative to text
-                 const angleRad = (layer.effectAngle * Math.PI) / 180;
-                 // Create a gradient that spans roughly the text size. 
-                 // Simple approximation: -fontSize to +fontSize
-                 const range = fontSizePx * 5; 
-                 const x1 = Math.cos(angleRad) * -range;
-                 const y1 = Math.sin(angleRad) * -range;
-                 const x2 = Math.cos(angleRad) * range;
-                 const y2 = Math.sin(angleRad) * range;
-                 
-                 const grad = ctx.createLinearGradient(x1, y1, x2, y2);
-                 grad.addColorStop(0, layer.textColor);
-                 grad.addColorStop(1, layer.effectColor);
-                 ctx.fillStyle = grad;
-             } else {
-                 ctx.fillStyle = color;
-             }
+             const angleRad = (layer.shadowAngle * Math.PI) / 180;
+             const dist = (layer.shadowOffset / 100) * fontSizePx;
              
-             ctx.strokeStyle = layer.hasOutline ? layer.outlineColor : 'transparent';
-             ctx.lineWidth = layer.outlineWidth;
+             const sX = dist * Math.cos(angleRad);
+             const sY = dist * Math.sin(angleRad);
+
+             // FIX: Reduced blur factor significantly to match visual crispness of CSS
+             const shadowBlurPx = (layer.shadowBlur / 100) * fontSizePx * 0.12;
+
+             ctx.filter = `blur(${shadowBlurPx}px)`;
+             ctx.fillStyle = hexToRgba(layer.shadowColor, layer.shadowOpacity ?? 1);
+
+             layout.forEach(item => {
+                 ctx.save();
+                 // Apply character transform + shadow offset
+                 ctx.translate(item.x + offsetX, item.y + offsetY);
+                 ctx.rotate(item.r * Math.PI / 180);
+                 ctx.translate(sX, sY);
+                 ctx.fillText(item.char, 0, 0);
+                 ctx.restore();
+             });
+             
+             ctx.restore();
+             return;
+        }
+
+        // --- STANDARD PASSES ---
+        if (blurPx > 0) ctx.filter = `blur(${blurPx}px)`;
+
+        // Setup Fill Style
+        let fillStyle: string | CanvasGradient = 'transparent';
+        if (layer.specialEffect === 'gradient' && !layer.isHollow && typeof color === 'string') {
+             const angleRad = (layer.effectAngle * Math.PI) / 180;
+             const range = fontSizePx * 5; 
+             const x1 = Math.cos(angleRad) * -range;
+             const y1 = Math.sin(angleRad) * -range;
+             const x2 = Math.cos(angleRad) * range;
+             const y2 = Math.sin(angleRad) * range;
+             
+             const grad = ctx.createLinearGradient(x1, y1, x2, y2);
+             grad.addColorStop(0, layer.textColor);
+             grad.addColorStop(1, layer.effectColor);
+             fillStyle = grad;
+        } else {
+             fillStyle = color;
         }
 
         layout.forEach(item => {
             ctx.save();
-            if (isPath) {
-                // Absolute positioning for Path
-                ctx.translate(item.x + offsetX, item.y + offsetY);
-                ctx.rotate(item.r * Math.PI / 180);
-                // No flip handling for path chars individually, assumes path flow
-            } else {
-                // Local positioning for Standard
-                ctx.translate(item.x + offsetX, item.y + offsetY);
-                ctx.rotate(item.r * Math.PI / 180);
+            ctx.translate(item.x + offsetX, item.y + offsetY);
+            ctx.rotate(item.r * Math.PI / 180);
+
+            // OUTLINE ONLY PASS
+            if (mode === 'outline-only' || mode === 'standard') {
+                if (layer.hasOutline) {
+                    ctx.strokeStyle = layer.outlineColor;
+                    ctx.lineWidth = layer.outlineWidth; 
+                    ctx.strokeText(item.char, 0, 0);
+                }
             }
 
-            if (mode === 'shadow-only') {
-                 ctx.fillText(item.char, 0, 0);
-            } else if (mode === 'stroke') {
-                 if (layer.hasOutline) ctx.strokeText(item.char, 0, 0);
-            } else {
-                 // Fill
-                 if (!layer.isHollow) {
-                     ctx.fillText(item.char, 0, 0);
-                 }
-                 // Outline (if not already handled, or if we want outline on top of fill)
-                 if (layer.hasOutline && layer.isHollow) {
-                      ctx.strokeText(item.char, 0, 0);
-                 } else if (layer.hasOutline) {
-                      // Optionally stroke after fill
-                      ctx.strokeText(item.char, 0, 0);
-                 }
+            // FILL/HOLLOW PASS
+            if (mode === 'fill-only' || mode === 'standard') {
+                if (layer.isHollow) {
+                    // Hollow Mode: Stroke with Text Color
+                    ctx.strokeStyle = typeof color === 'string' ? color : layer.textColor;
+                    ctx.lineWidth = Math.max(1, fontSizePx * 0.02); 
+                    ctx.strokeText(item.char, 0, 0);
+                } else {
+                    // Normal Fill
+                    ctx.fillStyle = fillStyle;
+                    ctx.fillText(item.char, 0, 0);
+                }
             }
+
             ctx.restore();
         });
 
@@ -366,8 +381,7 @@ const drawLayerToCtx = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: 
              const dx = Math.cos(angleRad) * distanceStep * i;
              const dy = Math.sin(angleRad) * distanceStep * i;
              const alpha = 0.5 * (1 - i/echoCount);
-             // Echo uses text color
-             renderPass(layer.textColor, dx, dy, 0, alpha, 'source-over', layer.isHollow ? 'stroke' : 'fill');
+             renderPass(layer.textColor, dx, dy, 0, alpha, 'source-over', 'standard');
         }
     }
 
@@ -381,9 +395,7 @@ const drawLayerToCtx = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: 
         const offsetBase = (layer.effectIntensity / 100) * (fontSizePx * 0.2);
         const angleRad = (layer.effectAngle * Math.PI) / 180;
         
-        // Determine Blend Mode for Glitch Channels
-        // Rainbow mode with Lights on = Screen. 
-        // Standard Glitch = Always Screen (red/blue mix to magenta).
+        // Use 'screen' for additive light effect, or source-over for standard paint
         const glitchBlend = (!layer.isRainbowGlitch || layer.isRainbowLights) ? 'screen' : 'source-over';
 
         if (layer.isRainbowGlitch) {
@@ -394,22 +406,21 @@ const drawLayerToCtx = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: 
                 const dist = (indexOffset * offsetBase * spreadFactor) / 2;
                 const dx = Math.cos(angleRad) * dist;
                 const dy = Math.sin(angleRad) * dist;
-                renderPass(color, dx, dy, layer.rainbowBlur, layer.rainbowOpacity, glitchBlend, 'fill');
+                renderPass(color, dx, dy, layer.rainbowBlur, layer.rainbowOpacity, glitchBlend, 'standard');
              });
         } else {
-             // Standard 2-channel glitch
              const dx = Math.cos(angleRad) * offsetBase;
              const dy = Math.sin(angleRad) * offsetBase;
-             renderPass(layer.effectColor, -dx, -dy, 1, 1, glitchBlend, 'fill');
-             renderPass(layer.effectColor2, dx, dy, 1, 1, glitchBlend, 'fill');
+             renderPass(layer.effectColor, -dx, -dy, 1, 1, glitchBlend, 'standard');
+             renderPass(layer.effectColor2, dx, dy, 1, 1, glitchBlend, 'standard');
         }
     }
 
     // 4. Main Text Pass
-    // Drawn on top. 
-    // If standard glitch, main text is usually drawn 'source-over' or 'screen' depending on look?
-    // Standard glitch usually puts white text on top of red/blue.
-    renderPass(layer.textColor, 0, 0, 0, 1, 'source-over', layer.isHollow ? 'stroke' : 'fill');
+    if (layer.hasOutline) {
+         renderPass(layer.textColor, 0, 0, 0, 1, 'source-over', 'outline-only');
+    }
+    renderPass(layer.textColor, 0, 0, 0, 1, 'source-over', 'fill-only');
 };
 
 // Helper: Get text metrics (Tight Ink Bounds) for Gizmo
@@ -444,6 +455,13 @@ const measureTextLayout = (ctx: CanvasRenderingContext2D, layer: TextLayer, widt
     const fontSize = (layer.textSize / 100) * width;
     ctx.font = constructCanvasFont(layer, fontSize);
     
+    // Apply variations to context for measurement too!
+    // DO NOT set letterSpacing here as it double-counts with our manual calculation.
+    if (ctx.canvas) {
+        ctx.canvas.style.fontVariationSettings = getFontVariationSettings(layer);
+        ctx.canvas.style.letterSpacing = '0px'; 
+    }
+
     const scaledLetterSpacing = layer.letterSpacing * (fontSize / 50);
     const rawText = layer.isUppercase ? layer.textOverlay.toUpperCase() : layer.textOverlay;
     const lines = rawText.split('\n');
@@ -799,6 +817,10 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
       const buffer = getBufferCanvas(width, height);
       const bufferCtx = buffer.getContext('2d');
       if (!bufferCtx) return;
+      
+      // Ensure high quality scaling
+      bufferCtx.imageSmoothingEnabled = true;
+      bufferCtx.imageSmoothingQuality = 'high';
 
       // 1. Render Background
       const bgImg = overrideBgImage || bgImageRef.current;
@@ -816,6 +838,8 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
           if (!scratchCtx) continue;
 
           scratchCtx.clearRect(0, 0, width, height);
+          scratchCtx.imageSmoothingEnabled = true;
+          scratchCtx.imageSmoothingQuality = 'high';
           
           // In Preview mode, the DOM Overlay handles all text rendering.
           // Unless forceUseCanvas is true (e.g., Stamping/Exporting), we skip drawing text here.
@@ -824,7 +848,33 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
           } else {
               // EXPORT MODE or FALLBACK: Use Native Canvas Renderer
               await document.fonts.ready; // Ensure fonts are ready before drawing
-              drawLayerToCtx(scratchCtx, layer, width, height);
+              
+              // FIX: Variable fonts and CSS properties often don't apply to detached canvas elements.
+              // To fix measurement/rendering discrepancies (text shift, wrong font weight/width),
+              // we temporarily attach the scratch canvas to the hidden DOM so it inherits styles correctly.
+              const needsDomAttach = true; 
+              let attached = false;
+              if (needsDomAttach && !scratch.isConnected) {
+                  scratch.style.position = 'absolute';
+                  scratch.style.visibility = 'hidden';
+                  scratch.style.pointerEvents = 'none';
+                  document.body.appendChild(scratch);
+                  attached = true;
+              }
+
+              try {
+                  const variationSettings = getFontVariationSettings(layer);
+                  // Apply styles to the canvas element itself
+                  scratch.style.fontVariationSettings = variationSettings;
+                  // DO NOT set letterSpacing here as it double-counts with our manual calculation.
+                  scratch.style.letterSpacing = '0px';
+
+                  drawLayerToCtx(scratchCtx, layer, width, height);
+              } finally {
+                  if (attached) {
+                      document.body.removeChild(scratch);
+                  }
+              }
           }
 
           // Composite Scratch to Buffer
@@ -972,7 +1022,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                   const variationSettings = getFontVariationSettings(layer);
                   const fontSizePx = (layer.textSize / 100) * imgDims.w;
                   
-                  // Explicit Font Properties
                   const fontWeight = layer.fontVariations && layer.fontVariations['wght'] !== undefined 
                       ? Math.round(layer.fontVariations['wght']) 
                       : (layer.isBold ? 700 : 400);
@@ -982,16 +1031,13 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                       fontStyle = `oblique ${Math.abs(layer.fontVariations['slnt'])}deg`;
                   }
 
-                  // Generate Advanced CSS Styles (Gradients, Echo, etc.)
-                  // We duplicate logic here for preview vs canvas export, but that is necessary for 
-                  // React interactive preview vs static canvas burn-in.
                   const shadows: string[] = [];
                    if (layer.hasShadow) {
                         const angleRad = (layer.shadowAngle * Math.PI) / 180;
                         const shadowDist = (layer.shadowOffset / 100) * fontSizePx;
                         const sX = shadowDist * Math.cos(angleRad);
                         const sY = shadowDist * Math.sin(angleRad);
-                        const sBlur = (layer.shadowBlur / 100) * fontSizePx * 2;
+                        const sBlur = (layer.shadowBlur / 100) * fontSizePx * 0.25; // Adjusted to match canvas
                         const sColor = hexToRgba(layer.shadowColor, layer.shadowOpacity ?? 1);
                         shadows.push(`${sX}px ${sY}px ${sBlur}px ${sColor}`);
                     }
@@ -1024,28 +1070,59 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                       mixBlendMode: layer.blendMode === 'normal' ? 'normal' : layer.blendMode as any,
                       zIndex: design.layers.findIndex(l => l.id === layer.id) * 10,
                       textShadow: shadows.join(', ') || 'none',
-                      color: layer.specialEffect === 'gradient' && !layer.isHollow ? 'transparent' : layer.textColor,
-                      backgroundImage: layer.specialEffect === 'gradient' && !layer.isHollow 
-                            ? `linear-gradient(${layer.effectAngle}deg, ${layer.textColor}, ${layer.effectColor})` 
-                            : 'none',
-                      backgroundClip: layer.specialEffect === 'gradient' && !layer.isHollow ? 'text' : 'border-box',
-                      WebkitBackgroundClip: layer.specialEffect === 'gradient' && !layer.isHollow ? 'text' : 'border-box',
-                      WebkitTextFillColor: layer.specialEffect === 'gradient' && !layer.isHollow ? 'transparent' : (layer.isHollow ? 'transparent' : 'currentColor'),
-                      WebkitTextStroke: (layer.isHollow || layer.hasOutline) 
-                            ? `${layer.hasOutline ? layer.outlineWidth : 2}px ${layer.hasOutline ? layer.outlineColor : layer.textColor}` 
-                            : 'none'
                   };
 
                   // --- CONTENT RENDERER ---
-                  const renderContent = (extraStyle?: React.CSSProperties) => {
+                  // mode: 'outline' | 'fill'
+                  const renderContent = (mode: 'outline' | 'fill', extraStyle?: React.CSSProperties) => {
+                      // Common Styles
+                      const modeStyle: React.CSSProperties = {
+                           ...baseStyle,
+                           ...extraStyle
+                      };
+
+                      if (mode === 'outline') {
+                          if (!layer.hasOutline) return null;
+                          modeStyle.color = 'transparent';
+                          modeStyle.WebkitTextStroke = `${layer.outlineWidth}px ${layer.outlineColor}`;
+                          modeStyle.textShadow = 'none'; // Outlines usually don't have the shadow (Shadow pass handles it)
+                      } 
+                      else if (mode === 'fill') {
+                           // FIX: Check if color was explicitly overridden (e.g. by Glitch effect) before applying base colors
+                           const hasExplicitColor = extraStyle && 'color' in extraStyle;
+                           
+                           if (!hasExplicitColor) {
+                                if (layer.isHollow) {
+                                        modeStyle.color = 'transparent';
+                                        modeStyle.WebkitTextStroke = `${Math.max(1, fontSizePx * 0.02)}px ${layer.textColor}`;
+                                } else {
+                                        modeStyle.color = layer.specialEffect === 'gradient' ? 'transparent' : layer.textColor;
+                                        if (layer.specialEffect === 'gradient') {
+                                            modeStyle.backgroundImage = `linear-gradient(${layer.effectAngle}deg, ${layer.textColor}, ${layer.effectColor})`;
+                                            modeStyle.backgroundClip = 'text';
+                                            modeStyle.WebkitBackgroundClip = 'text';
+                                            modeStyle.WebkitTextFillColor = 'transparent';
+                                        }
+                                }
+                           }
+                      }
+
                       // --- PATH TEXT ---
                       if (layer.pathPoints.length > 0) {
                           const ctx = textCanvasRef.current?.getContext('2d');
                           if (!ctx) return null;
+                          
+                          // CRITICAL: Set the font on the context so measurement matches visual render!
+                          ctx.font = constructCanvasFont(layer, fontSizePx);
+                          if (ctx.canvas) {
+                              ctx.canvas.style.fontVariationSettings = variationSettings;
+                              ctx.canvas.style.letterSpacing = '0px';
+                          }
+
                           const layout = calculatePathLayout(ctx, layer, fontSizePx);
                           
                           return (
-                              <div style={{ ...baseStyle, width: '100%', height: '100%', left: 0, top: 0, ...extraStyle }}>
+                              <div style={{ ...modeStyle, width: '100%', height: '100%', left: 0, top: 0 }}>
                                   {layout.map((item, i) => (
                                       <div 
                                         key={i}
@@ -1071,20 +1148,22 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                       const textToRender = layer.isUppercase ? layer.textOverlay.toUpperCase() : layer.textOverlay;
                       const lines = textToRender.split('\n');
 
+                      const standardTransform = `translate(-50%, -50%) rotate(${layer.rotation}deg) scale(${layer.flipX ? -1 : 1}, ${layer.flipY ? -1 : 1})`;
+                      const finalTransform = extraStyle?.transform || standardTransform;
+
                       return (
                           <div 
                               style={{
-                                  ...baseStyle,
+                                  ...modeStyle,
                                   left: `${xPct}%`,
                                   top: `${yPct}%`,
-                                  transform: `translate(-50%, -50%) rotate(${layer.rotation}deg) scale(${layer.flipX ? -1 : 1}, ${layer.flipY ? -1 : 1})`,
+                                  transform: finalTransform,
                                   transformOrigin: 'center center',
                                   display: 'flex',
                                   flexDirection: 'column',
                                   alignItems: layer.textAlign === 'center' ? 'center' : layer.textAlign === 'right' ? 'flex-end' : 'flex-start',
                                   minWidth: '10px',
                                   textAlign: layer.textAlign,
-                                  ...extraStyle
                               }}
                           >
                               {lines.map((line, i) => (
@@ -1110,40 +1189,33 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                       
                       const cloneResetStyle = {
                           textShadow: 'none',
-                          WebkitTextStroke: '0px transparent', // Explicitly remove outline
-                          WebkitTextFillColor: 'currentColor', // Force fill to current color
-                          backgroundImage: 'none', // Remove gradient
+                          WebkitTextStroke: '0px transparent', 
+                          WebkitTextFillColor: 'currentColor', 
+                          backgroundImage: 'none', 
                           mixBlendMode: (!layer.isRainbowGlitch || layer.isRainbowLights) ? 'screen' as const : 'normal' as const
-                      };
-
-                      // Styles for Main Text when Glitching
-                      const mainStyleNoShadow = {
-                          textShadow: 'none'
                       };
 
                       const renderClones = () => {
                         if (layer.isRainbowGlitch) {
-                            // Updated Rainbow Colors: Red, Orange, Yellow, Green, Cyan, Blue, Violet, Indigo (Last)
                             const rainbowColors = ['#ff0000', '#ffa500', '#ffff00', '#00ff00', '#00ffff', '#0000ff', '#8f00ff', '#4b0082'];
-                            const spreadFactor = 3.0; // Doubled spread from 1.5
+                            const spreadFactor = 3.0;
                             
                             return (
                                 <>
                                     {rainbowColors.map((color, i) => {
-                                        // Dynamic centering offset based on array length
                                         const indexOffset = i - (rainbowColors.length - 1) / 2;
                                         const dist = (indexOffset * offsetBase * spreadFactor) / 2;
                                         const dx = Math.cos(angleRad) * dist;
                                         const dy = Math.sin(angleRad) * dist;
 
                                         return (
-                                            <React.Fragment key={i}>
-                                            {renderContent({
+                                            <React.Fragment key={`rainbow-${i}`}>
+                                            {renderContent('fill', {
                                                 transform: layer.pathPoints.length > 0 
                                                 ? `translate(${dx}px, ${dy}px)` 
                                                 : `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) rotate(${layer.rotation}deg) scale(${layer.flipX ? -1 : 1}, ${layer.flipY ? -1 : 1})`,
                                                 color: color,
-                                                zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 2, // Layer + 2
+                                                zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 2, 
                                                 opacity: layer.rainbowOpacity,
                                                 filter: `blur(${layer.rainbowBlur}px)`,
                                                 pointerEvents: 'none',
@@ -1155,32 +1227,30 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                                 </>
                             );
                         } else {
-                            // STANDARD MODE: 2 Clones (Red/Blue or custom)
+                            // STANDARD MODE: 2 Clones (Red/Blue)
                             const dx = Math.cos(angleRad) * offsetBase;
                             const dy = Math.sin(angleRad) * offsetBase;
                             
                             return (
                                 <>
-                                    {/* Clone 1 (Left/Negative) */}
-                                    {renderContent({
+                                    {renderContent('fill', {
                                         transform: layer.pathPoints.length > 0 
                                            ? `translate(${-dx}px, ${-dy}px)` 
                                            : `translate(calc(-50% - ${dx}px), calc(-50% - ${dy}px)) rotate(${layer.rotation}deg) scale(${layer.flipX ? -1 : 1}, ${layer.flipY ? -1 : 1})`,
                                         color: layer.effectColor,
-                                        zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 2, // Layer + 2
+                                        zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 2,
                                         opacity: 1,
                                         filter: 'blur(1px)',
                                         pointerEvents: 'none',
                                         ...cloneResetStyle
                                     })}
 
-                                    {/* Clone 2 (Right/Positive) */}
-                                    {renderContent({
+                                    {renderContent('fill', {
                                         transform: layer.pathPoints.length > 0 
                                            ? `translate(${dx}px, ${dy}px)` 
                                            : `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) rotate(${layer.rotation}deg) scale(${layer.flipX ? -1 : 1}, ${layer.flipY ? -1 : 1})`,
                                         color: layer.effectColor2,
-                                        zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 2, // Layer + 2
+                                        zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 2,
                                         opacity: 1,
                                         filter: 'blur(1px)',
                                         pointerEvents: 'none',
@@ -1193,30 +1263,37 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
 
                       return (
                           <React.Fragment key={layer.id}>
-                                {/* 1. Shadow Pass (Bottom) */}
-                                {layer.hasShadow && renderContent({
+                                {/* 1. Shadow Pass (Bottom) - Using invisible fill */}
+                                {layer.hasShadow && renderContent('fill', {
                                     color: 'transparent',
                                     WebkitTextFillColor: 'transparent',
                                     WebkitTextStroke: '0px transparent',
                                     backgroundImage: 'none',
-                                    zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 1, // Layer + 1
-                                    mixBlendMode: 'normal' // Shadows handle their own blending via rgba
+                                    zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 1,
+                                    mixBlendMode: 'normal'
                                 })}
 
                                 {/* 2. Clones (Middle) */}
                                 {renderClones()}
 
-                                {/* 3. Main Channel (Top) */}
-                                {renderContent({
-                                    zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 3, // Layer + 3
-                                    ...mainStyleNoShadow
-                                })}
+                                {/* 3. Main Channel (Top) - Split into Outline and Fill */}
+                                {renderContent('outline', { zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 3, textShadow: 'none' })}
+                                {renderContent('fill', { zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 3, textShadow: 'none' })}
                           </React.Fragment>
                       );
                   }
 
-                  // Normal Render
-                  return <React.Fragment key={layer.id}>{renderContent()}</React.Fragment>;
+                  // Normal Render: Shadow -> Outline -> Fill
+                  return (
+                    <React.Fragment key={layer.id}>
+                        {/* Shadow is inherent in baseStyle via textShadow property */}
+                        {/* Pass 1: Outline (if exists) */}
+                        {layer.hasOutline && renderContent('outline', { zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 1 })}
+                        
+                        {/* Pass 2: Fill / Hollow (on top) */}
+                        {renderContent('fill', { zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 2 })}
+                    </React.Fragment>
+                  );
               })}
           </div>
       );

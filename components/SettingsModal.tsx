@@ -1,7 +1,5 @@
-
-
 import React, { useState, useRef, useEffect } from 'react';
-import { X, MousePointer2, Settings, Cloud, Key, Check, Loader2, Terminal } from 'lucide-react';
+import { X, MousePointer2, Settings, Cloud, Key, Check, Loader2, Terminal, MessageSquareQuote, Star, ChevronDown } from 'lucide-react';
 import { AppSettings } from '../types';
 
 interface SettingsModalProps {
@@ -10,6 +8,15 @@ interface SettingsModalProps {
   settings: AppSettings;
   onSettingsChange: (newSettings: AppSettings) => void;
 }
+
+const QUALITY_PRESETS = [
+    { label: 'None', value: '' },
+    { label: 'Standard', value: 'High quality' },
+    { label: 'Photorealistic', value: 'Photorealistic, 8k, highly detailed' },
+    { label: 'Cinematic', value: 'Cinematic lighting, dramatic atmosphere' },
+    { label: 'Studio', value: 'Studio photography, professional lighting' },
+    { label: 'Vibrant', value: 'Vibrant colors, sharp focus' },
+];
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ 
   isOpen, 
@@ -191,6 +198,53 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
           {activeTab === 'services' && (
             <div className="space-y-6 animate-in slide-in-from-right-2 fade-in duration-200">
+                
+                {/* System Prompts Section */}
+                <div className="space-y-4 pb-4 border-b border-neutral-800/50">
+                    <div className="flex items-center gap-2 mb-2">
+                         <div className="p-1.5 rounded-[3px] bg-neutral-800 text-neutral-400"><MessageSquareQuote size={14} /></div>
+                         <h3 className="text-xs font-bold text-neutral-300 uppercase tracking-wide">System Prompts</h3>
+                    </div>
+
+                    <div className="space-y-1">
+                        <label className="text-[10px] text-neutral-500 font-medium ml-1">Generation Suffix</label>
+                        <textarea 
+                            value={settings.generationSystemPrompt}
+                            onChange={(e) => onSettingsChange({...settings, generationSystemPrompt: e.target.value})}
+                            className="w-full bg-neutral-950 border border-neutral-800 rounded-[3px] p-2 text-xs text-neutral-300 focus:outline-none focus:border-pink-500 transition-colors resize-y h-16 leading-relaxed"
+                            placeholder="e.g. Cinematic lighting, high detail..."
+                        />
+                    </div>
+
+                    <div className="space-y-1">
+                        <label className="text-[10px] text-neutral-500 font-medium ml-1">Editing Suffix</label>
+                        <textarea 
+                            value={settings.editingSystemPrompt}
+                            onChange={(e) => onSettingsChange({...settings, editingSystemPrompt: e.target.value})}
+                            className="w-full bg-neutral-950 border border-neutral-800 rounded-[3px] p-2 text-xs text-neutral-300 focus:outline-none focus:border-pink-500 transition-colors resize-y h-16 leading-relaxed"
+                            placeholder="e.g. Maintain photorealism..."
+                        />
+                    </div>
+
+                     <div className="space-y-1">
+                        <label className="text-[10px] text-neutral-500 font-medium ml-1 flex items-center gap-1"><Star size={10}/> Quality Parameter</label>
+                        <div className="relative">
+                            <select 
+                                value={settings.quality}
+                                onChange={(e) => onSettingsChange({...settings, quality: e.target.value})}
+                                className="w-full bg-neutral-950 border border-neutral-800 rounded-[3px] p-2 text-xs text-neutral-300 focus:outline-none focus:border-pink-500 transition-colors appearance-none cursor-pointer"
+                            >
+                                {QUALITY_PRESETS.map((preset) => (
+                                    <option key={preset.label} value={preset.value}>
+                                        {preset.label}
+                                    </option>
+                                ))}
+                            </select>
+                            <ChevronDown size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none" />
+                        </div>
+                    </div>
+                </div>
+
                 <div className="space-y-2">
                     <label className="text-xs font-bold text-neutral-400 uppercase tracking-wider flex items-center gap-2">
                         <Key size={14} /> Gemini API Key

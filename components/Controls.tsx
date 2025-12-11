@@ -9,7 +9,7 @@ import {
   AlignLeft, AlignCenter, AlignRight, Move, Activity,
   Maximize, MoveHorizontal, MoveVertical, Undo2, Redo2, ToggleRight, ToggleLeft, Paintbrush,
   Plus, Eye, EyeOff, ChevronUp, ChevronDown, Wand2, BoxSelect, BookType, Link as LinkIcon, Stamp,
-  Sliders, ToggleLeft as ToggleOff, ToggleRight as ToggleOn
+  Sliders, ToggleLeft as ToggleOff, ToggleRight as ToggleOn, Globe
 } from 'lucide-react';
 import SliderControl from './SliderControl';
 import EffectsControls from './EffectsControls';
@@ -41,6 +41,7 @@ interface ControlsProps {
   vibeReasoning: string | null;
   hasImage: boolean;
   onError?: (error: any) => void;
+  groundingMetadata?: any;
 }
 
 export interface ControlsHandle {
@@ -74,7 +75,8 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
   canRedo,
   isGenerating,
   hasImage,
-  onError
+  onError,
+  groundingMetadata
 }, ref) => {
   const [layerToDelete, setLayerToDelete] = useState<string | null>(null);
   const [hoveredControl, setHoveredControl] = useState<string | null>(null);
@@ -635,6 +637,33 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
                 </div>
             </div>
 
+            {/* Search Grounding Sources */}
+            {groundingMetadata?.groundingChunks && groundingMetadata.groundingChunks.length > 0 && (
+                <div className="mt-2 text-xs animate-in slide-in-from-top-1 fade-in">
+                    <div className="text-[10px] font-bold text-neutral-500 mb-1 flex items-center gap-1.5 uppercase tracking-wider">
+                        <Globe size={10} /> Sources
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                        {groundingMetadata.groundingChunks.map((chunk: any, i: number) => {
+                            if (!chunk.web) return null;
+                            const hostname = tryGetHostname(chunk.web.uri);
+                            return (
+                                <a 
+                                    key={i} 
+                                    href={chunk.web.uri} 
+                                    target="_blank" 
+                                    rel="noreferrer" 
+                                    className="block bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white px-2 py-1 rounded-[3px] border border-neutral-700 transition-colors truncate max-w-[200px]"
+                                    title={chunk.web.title}
+                                >
+                                    {chunk.web.title || hostname}
+                                </a>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
           </div>
         </CollapsibleSection>
 
@@ -801,21 +830,19 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
                       <button onClick={() => updateLayer('textAlign', 'right')} className={`flex-1 h-8 rounded-[3px] flex items-center justify-center ${activeLayer.textAlign === 'right' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:text-white'}`}><AlignRight size={16} /></button>
                   </div>
                   <div className="flex gap-1 bg-neutral-950 rounded-[3px] p-1 border border-neutral-800">
-                      <button onClick={() => toggleLayer('flipX')} className={`h-8 w-8 rounded-[3px] hover:bg-neutral-800 flex items-center justify-center ${activeLayer.flipX ? 'bg-neutral-800 text-pink-500' : 'text-neutral-400'}`}><FlipHorizontal size={16} /></button>
-                      <button onClick={() => toggleLayer('flipY')} className={`h-8 w-8 rounded-[3px] hover:bg-neutral-800 flex items-center justify-center ${activeLayer.flipY ? 'bg-neutral-800 text-pink-500' : 'text-neutral-400'}`}><FlipVertical size={16} /></button>
+                      
                   </div>
             </div>
 
-            {/* Variable Font Sliders & Toggles */}
+            {/* Variable Axes Subpanel */}
             {variableConfig && variableConfig.axes.length > 0 && (
-                 <div className="mb-3 space-y-2 bg-neutral-950 border border-neutral-800 p-2 rounded-[3px] animate-in slide-in-from-top-1 fade-in">
+                 <div className="mt-2 mb-3 space-y-2 bg-neutral-950 border border-neutral-800 p-2 rounded-[3px] animate-in slide-in-from-top-1 fade-in">
                     <div className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider mb-1 flex items-center gap-1">
                         <Sliders size={10} /> Variable Axes
                     </div>
                     {variableConfig.axes.map(axis => {
                         const currentValue = activeLayer.fontVariations?.[axis.tag] ?? axis.defaultValue;
                         
-                        // Check if axis is a toggle
                         if (axis.inputType === 'toggle') {
                             const isToggled = currentValue === 1;
                             return (
@@ -838,7 +865,6 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
                             );
                         }
 
-                        // Default to Slider
                         return (
                             <SliderControl 
                                 key={axis.tag}
@@ -854,6 +880,11 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
                     })}
                  </div>
             )}
+            
+            <div className="flex gap-1 bg-neutral-950 rounded-[3px] p-1 border border-neutral-800 mb-2">
+                  <button onClick={() => toggleLayer('flipX')} className={`flex-1 h-8 rounded-[3px] hover:bg-neutral-800 flex items-center justify-center ${activeLayer.flipX ? 'bg-neutral-800 text-pink-500' : 'text-neutral-400'}`}><FlipHorizontal size={16} /></button>
+                  <button onClick={() => toggleLayer('flipY')} className={`flex-1 h-8 rounded-[3px] hover:bg-neutral-800 flex items-center justify-center ${activeLayer.flipY ? 'bg-neutral-800 text-pink-500' : 'text-neutral-400'}`}><FlipVertical size={16} /></button>
+            </div>
 
             <SliderControl label="Kerning" icon={AlignCenterHorizontal} value={activeLayer.letterSpacing} setValue={(v) => updateLayer('letterSpacing', v)} min="-20" max="100" step="1" suffix="px" defaultValue={0} />
             <SliderControl label="Letter Rotate" icon={RotateCw} value={activeLayer.letterRotation} setValue={(v) => updateLayer('letterRotation', v)} min="-180" max="180" step="1" suffix="°" defaultValue={0} />
@@ -1095,5 +1126,10 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
     </div>
   );
 });
+
+// Helper for displaying hostname
+const tryGetHostname = (url: string) => {
+    try { return new URL(url).hostname.replace('www.', ''); } catch { return url; }
+};
 
 export default Controls;

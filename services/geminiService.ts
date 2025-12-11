@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Modality, GenerateContentResponse } from "@google/genai";
 import { AspectRatio, Orientation, GenModel, ImageResolution } from "../types";
 
@@ -65,6 +64,11 @@ const getApiAspectRatio = (aspectRatio: AspectRatio, orientation: Orientation): 
     return orientation === 'portrait' ? '3:4' : '4:3';
 };
 
+export interface GeneratedImageResult {
+    imageData: string;
+    groundingMetadata?: any;
+}
+
 /**
  * Generates the visual background using Gemini models.
  * Supports switching between Nano Banana Pro (Gemini 3 Pro) and Nano Banana (Gemini 2.5 Flash).
@@ -76,9 +80,11 @@ export const generateBackgroundImage = async (
     apiKey?: string,
     model: GenModel = 'gemini-3-pro-image-preview',
     resolution: ImageResolution = '1K',
+    quality: string = '',
+    systemPrompt: string = '',
     signal?: AbortSignal,
     logger?: (msg: string) => void
-): Promise<string> => {
+): Promise<GeneratedImageResult> => {
   try {
     const ai = getClient(apiKey);
     const targetRatio = getApiAspectRatio(aspectRatio, orientation);
@@ -90,15 +96,20 @@ export const generateBackgroundImage = async (
         }
     };
 
-    // Only Gemini 3 Pro Image Preview supports 'imageSize'
+    // Only Gemini 3 Pro Image Preview supports 'imageSize' and 'googleSearch'
     if (model === 'gemini-3-pro-image-preview') {
         config.imageConfig.imageSize = resolution;
+        config.tools = [{ googleSearch: {} }];
     }
+
+    // Cleanly construct prompt by filtering out empty strings
+    const promptParts = [prompt, quality, systemPrompt].filter(p => p && p.trim().length > 0);
+    const fullPrompt = promptParts.join('. ');
 
     // Calculate approximate request size
     const requestPayloadJSON = JSON.stringify({
         model,
-        contents: [{ parts: [{ text: `${prompt}. High quality...` }] }],
+        contents: [{ parts: [{ text: fullPrompt }] }],
         config
     });
     const requestSizeKB = (new TextEncoder().encode(requestPayloadJSON).length / 1024).toFixed(2);
@@ -109,7 +120,15 @@ export const generateBackgroundImage = async (
         logger(`  Resolution: ${resolution}`);
         logger(`  Aspect Ratio: ${targetRatio}`);
         logger(`  Payload Size: ~${requestSizeKB} KB`);
-        logger(`  Prompt: "${prompt}"`);
+        logger(`  -- Parameters --`);
+        logger(`  Base Prompt: "${prompt}"`);
+        logger(`  Quality Param: "${quality}"`);
+        logger(`  System Param: "${systemPrompt}"`);
+        logger(`  [FINAL PROMPT]: "${fullPrompt}"`); // Explicitly log the final prompt
+        
+        if (model === 'gemini-3-pro-image-preview') {
+            logger(`  Grounding: Search Enabled`);
+        }
     }
 
     const startTime = Date.now();
@@ -118,7 +137,7 @@ export const generateBackgroundImage = async (
       model: model,
       contents: {
         parts: [
-            { text: `${prompt}. High quality, cinematic lighting, negative space for text overlay, polished design aesthetic.` }
+            { text: fullPrompt }
         ]
       },
       config: config,
@@ -144,6 +163,11 @@ export const generateBackgroundImage = async (
             if (logger) logger(`[WARNING] Finish Reason: ${finishReason}`);
         }
 
+        const groundingMetadata = candidate.groundingMetadata;
+        if (groundingMetadata && logger) {
+            logger(`[INFO] Grounding Metadata received`);
+        }
+
         for (const part of candidate.content?.parts || []) {
             if (part.inlineData && part.inlineData.data) {
                 const sizeBytes = part.inlineData.data.length * 0.75; // Approx decoded size
@@ -153,13 +177,12 @@ export const generateBackgroundImage = async (
                     logger(`[SUCCESS] Image Data Extracted`);
                     logger(`  Payload Size: ${sizeMB} MB`);
                     logger(`  MimeType: ${part.inlineData.mimeType}`);
-                    if (model === 'gemini-3-pro-image-preview') {
-                        logger(`  Target Resolution: ${resolution} (${targetRatio})`);
-                    } else {
-                        logger(`  Target Aspect Ratio: ${targetRatio}`);
-                    }
                 }
-                return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+                
+                return {
+                    imageData: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`,
+                    groundingMetadata
+                };
             }
             if (part.text) {
                 textResponse += part.text + ' ';
@@ -201,9 +224,11 @@ export const editImage = async (
     apiKey?: string,
     model: GenModel = 'gemini-3-pro-image-preview',
     resolution: ImageResolution = '1K',
+    quality: string = '',
+    systemPrompt: string = '',
     signal?: AbortSignal,
     logger?: (msg: string) => void
-): Promise<string> => {
+): Promise<GeneratedImageResult> => {
   try {
     const ai = getClient(apiKey);
     const targetRatio = getApiAspectRatio(aspectRatio, orientation);
@@ -225,10 +250,15 @@ export const editImage = async (
         }
     };
 
-    // Only Gemini 3 Pro Image Preview supports 'imageSize'
+    // Only Gemini 3 Pro Image Preview supports 'imageSize' and 'googleSearch'
     if (model === 'gemini-3-pro-image-preview') {
         config.imageConfig.imageSize = resolution;
+        config.tools = [{ googleSearch: {} }];
     }
+
+    // Cleanly construct prompt
+    const promptParts = [prompt, quality, systemPrompt].filter(p => p && p.trim().length > 0);
+    const fullPrompt = promptParts.join('. ');
 
     if (logger) {
         logger(`[REQUEST] Initiating Edit...`);
@@ -236,7 +266,15 @@ export const editImage = async (
         logger(`  Input Image: ${inputSizeMB.toFixed(2)} MB (${mimeType})`);
         logger(`  Target Resolution: ${resolution}`);
         logger(`  Aspect Ratio: ${targetRatio}`);
-        logger(`  Prompt: "${prompt}"`);
+        logger(`  -- Parameters --`);
+        logger(`  Base Prompt: "${prompt}"`);
+        logger(`  Quality Param: "${quality}"`);
+        logger(`  System Param: "${systemPrompt}"`);
+        logger(`  [FINAL PROMPT]: "${fullPrompt}"`); // Explicitly log
+        
+        if (model === 'gemini-3-pro-image-preview') {
+            logger(`  Grounding: Search Enabled`);
+        }
     }
 
     const startTime = Date.now();
@@ -253,7 +291,7 @@ export const editImage = async (
             },
           },
           {
-            text: `${prompt}. Maintain high quality and photorealism.`,
+            text: fullPrompt,
           },
         ],
       },
@@ -279,6 +317,8 @@ export const editImage = async (
              if (logger) logger(`[WARNING] Finish Reason: ${finishReason}`);
         }
 
+        const groundingMetadata = candidate.groundingMetadata;
+
         for (const part of candidate.content?.parts || []) {
             if (part.inlineData && part.inlineData.data) {
                 const outputSizeBytes = part.inlineData.data.length * 0.75;
@@ -289,7 +329,10 @@ export const editImage = async (
                     logger(`  Payload Size: ${sizeMB} MB`);
                     logger(`  MimeType: ${part.inlineData.mimeType}`);
                 }
-                return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+                return {
+                    imageData: `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`,
+                    groundingMetadata
+                };
             }
             if (part.text) {
                 textResponse += part.text + ' ';
