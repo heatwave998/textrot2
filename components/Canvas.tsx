@@ -282,7 +282,8 @@ const drawLayerToCtx = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: 
         blurPx: number, 
         opacity: number, 
         compositeOp: GlobalCompositeOperation, 
-        mode: 'standard' | 'shadow-only' | 'outline-only' | 'fill-only'
+        mode: 'standard' | 'shadow-only' | 'outline-only' | 'fill-only',
+        forceSolid: boolean = false
     ) => {
         ctx.save();
         
@@ -307,7 +308,8 @@ const drawLayerToCtx = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: 
              const sY = dist * Math.sin(angleRad);
 
              // Reduced blur factor significantly to match visual crispness of CSS
-             const shadowBlurPx = (layer.shadowBlur / 100) * fontSizePx * 0.5;
+             // Changed from 0.5 to 0.25 to align canvas filter blur with CSS text-shadow blur
+             const shadowBlurPx = (layer.shadowBlur / 100) * fontSizePx * 0.25;
 
              ctx.filter = `blur(${shadowBlurPx}px)`;
              ctx.fillStyle = hexToRgba(layer.shadowColor, layer.shadowOpacity ?? 1);
@@ -363,7 +365,7 @@ const drawLayerToCtx = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: 
 
             // FILL/HOLLOW PASS
             if (mode === 'fill-only' || mode === 'standard') {
-                if (layer.isHollow) {
+                if (layer.isHollow && !forceSolid) {
                     ctx.strokeStyle = typeof color === 'string' ? color : layer.textColor;
                     ctx.lineWidth = Math.max(1, fontSizePx * 0.02); 
                     ctx.strokeText(item.char, 0, 0);
@@ -397,7 +399,9 @@ const drawLayerToCtx = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: 
              const dx = Math.cos(angleRad) * distanceStep * i;
              const dy = Math.sin(angleRad) * distanceStep * i;
              const alpha = 0.5 * (1 - i/echoCount);
-             renderPass(layer.textColor, dx, dy, 0, alpha, 'source-over', 'standard');
+             // Use 'fill-only' to avoid applying the outline stroke to the echo
+             // Pass forceSolid=true to ensure echo is solid even if main text is hollow
+             renderPass(layer.textColor, dx, dy, 0, alpha, 'source-over', 'fill-only', true);
         }
     }
 
@@ -416,13 +420,17 @@ const drawLayerToCtx = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: 
                 const dist = (indexOffset * offsetBase * spreadFactor) / 2;
                 const dx = Math.cos(angleRad) * dist;
                 const dy = Math.sin(angleRad) * dist;
-                renderPass(color, dx, dy, layer.rainbowBlur, layer.rainbowOpacity, glitchBlend, 'standard');
+                // Use 'fill-only' to avoid applying the outline stroke to the glitch layers
+                // Pass forceSolid=true to ensure glitch is solid even if main text is hollow
+                renderPass(color, dx, dy, layer.rainbowBlur, layer.rainbowOpacity, glitchBlend, 'fill-only', true);
              });
         } else {
              const dx = Math.cos(angleRad) * offsetBase;
              const dy = Math.sin(angleRad) * offsetBase;
-             renderPass(layer.effectColor, -dx, -dy, 1, 1, glitchBlend, 'standard');
-             renderPass(layer.effectColor2, dx, dy, 1, 1, glitchBlend, 'standard');
+             // Use 'fill-only' to avoid applying the outline stroke to the glitch layers
+             // Pass forceSolid=true to ensure glitch is solid even if main text is hollow
+             renderPass(layer.effectColor, -dx, -dy, 1, 1, glitchBlend, 'fill-only', true);
+             renderPass(layer.effectColor2, dx, dy, 1, 1, glitchBlend, 'fill-only', true);
         }
     }
 
@@ -1053,7 +1061,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                       fontVariationSettings: variationSettings,
                       lineHeight: 1.0,
                       letterSpacing: `${layer.letterSpacing * (fontSizePx/50)}px`,
-                      fontSynthesis: 'none',
+                      fontSynthesis: 'style weight',
                       WebkitFontSmoothing: 'antialiased',
                       MozOsxFontSmoothing: 'grayscale',
                       opacity: layer.opacity,
