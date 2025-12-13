@@ -101,6 +101,20 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
     setPanelState(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const handleShortcutToggle = useCallback((key: keyof typeof panelState, elementId: string) => {
+    setPanelState(prev => {
+        const nextState = !prev[key];
+        if (nextState) {
+            // If opening, scroll into view
+            setTimeout(() => {
+                const el = document.getElementById(elementId);
+                el?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 150); // Slight delay to allow for expansion animation/render
+        }
+        return { ...prev, [key]: nextState };
+    });
+  }, []);
+
   const toggleAllPanels = useCallback(() => {
     setPanelState(prev => {
         // If all are currently open, collapse all. Otherwise, expand all.
@@ -139,16 +153,16 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
   // Keyboard Shortcuts for Panel Toggles
   const panelShortcuts = useMemo(() => [
     { id: 'toggle-all', combo: { code: 'Backquote', shift: true }, action: toggleAllPanels },
-    { id: 'toggle-gen', combo: { code: 'Digit0', shift: true}, action: () => togglePanel('gen') },
-    { id: 'toggle-layers', combo: { code: 'Digit1', shift: true }, action: () => togglePanel('layers') },
-    { id: 'toggle-content', combo: { code: 'Digit2', shift: true }, action: () => togglePanel('content') },
-    { id: 'toggle-typography', combo: { code: 'Digit3', shift: true }, action: () => togglePanel('typography') },
-    { id: 'toggle-appearance', combo: { code: 'Digit4', shift: true }, action: () => togglePanel('appearance') },
-    { id: 'toggle-transform', combo: { code: 'Digit5', shift: true }, action: () => togglePanel('transform') },
-    { id: 'toggle-path', combo: { code: 'Digit6', shift: true }, action: () => togglePanel('path') },
-    { id: 'toggle-effects', combo: { code: 'Digit7', shift: true }, action: () => togglePanel('effects') },
-    { id: 'toggle-blending', combo: { code: 'Digit8', shift: true }, action: () => togglePanel('blending') },
-  ], [toggleAllPanels]);
+    { id: 'toggle-gen', combo: { code: 'Digit0', shift: true}, action: () => handleShortcutToggle('gen', 'panel-gen') },
+    { id: 'toggle-layers', combo: { code: 'Digit1', shift: true }, action: () => handleShortcutToggle('layers', 'panel-layers') },
+    { id: 'toggle-content', combo: { code: 'Digit2', shift: true }, action: () => handleShortcutToggle('content', 'panel-content') },
+    { id: 'toggle-typography', combo: { code: 'Digit3', shift: true }, action: () => handleShortcutToggle('typography', 'panel-typography') },
+    { id: 'toggle-appearance', combo: { code: 'Digit4', shift: true }, action: () => handleShortcutToggle('appearance', 'panel-appearance') },
+    { id: 'toggle-transform', combo: { code: 'Digit5', shift: true }, action: () => handleShortcutToggle('transform', 'panel-transform') },
+    { id: 'toggle-path', combo: { code: 'Digit6', shift: true }, action: () => handleShortcutToggle('path', 'panel-path') },
+    { id: 'toggle-effects', combo: { code: 'Digit7', shift: true }, action: () => handleShortcutToggle('effects', 'panel-effects') },
+    { id: 'toggle-blending', combo: { code: 'Digit8', shift: true }, action: () => handleShortcutToggle('blending', 'panel-blending') },
+  ], [toggleAllPanels, handleShortcutToggle]);
   
   useKeyboard(panelShortcuts);
 
@@ -463,11 +477,32 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
       {/* Header */}
       <div className="p-6 border-b border-neutral-800 flex items-start justify-between bg-neutral-900 shrink-0 z-10">
         <div>
-            <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-pink-500 to-violet-500 mb-1">
+            <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-pink-300 to-violet-700 mb-1">
             ///textrot studio
             </h2>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
+            <Tooltip content="Undo (Ctrl+Z)" position="bottom">
+                <button 
+                    onClick={onUndo}
+                    disabled={!canUndo}
+                    className={`p-2 rounded-[3px] transition-colors ${canUndo ? 'text-neutral-500 hover:text-white hover:bg-neutral-800' : 'text-neutral-800 cursor-not-allowed'}`}
+                >
+                    <Undo2 size={20} />
+                </button>
+            </Tooltip>
+            <Tooltip content="Redo (Ctrl+⇧+Z)" position="bottom">
+                <button 
+                    onClick={onRedo}
+                    disabled={!canRedo}
+                    className={`p-2 rounded-[3px] transition-colors ${canRedo ? 'text-neutral-500 hover:text-white hover:bg-neutral-800' : 'text-neutral-800 cursor-not-allowed'}`}
+                >
+                    <Redo2 size={20} />
+                </button>
+            </Tooltip>
+            
+            <div className="w-px h-5 bg-neutral-800 mx-1"></div>
+
             <button 
                 onClick={onOpenSettings}
                 className="text-neutral-500 hover:text-white transition-colors p-2 rounded-[3px] hover:bg-neutral-800"
@@ -482,6 +517,7 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
         
         {/* Generator Section */}
         <CollapsibleSection 
+            id="panel-gen"
             title="Image Generator" 
             icon={Wand2} 
             isOpen={panelState.gen}
@@ -580,22 +616,6 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
             {/* Image Prompt Section */}
             <div className="flex items-center justify-between">
                 <label className="block text-xs font-bold text-neutral-200 uppercase tracking-wider">Image Prompt</label>
-                <div className="flex items-center gap-1">
-                  <button 
-                      onClick={onUndo}
-                      disabled={!canUndo}
-                      className={`p-1 rounded-[3px] transition-colors ${canUndo ? 'text-neutral-400 hover:text-white hover:bg-neutral-800' : 'text-neutral-800 cursor-not-allowed'}`}
-                  >
-                      <Undo2 size={16} />
-                  </button>
-                  <button 
-                      onClick={onRedo}
-                      disabled={!canRedo}
-                      className={`p-1 rounded-[3px] transition-colors ${canRedo ? 'text-neutral-400 hover:text-white hover:bg-neutral-800' : 'text-neutral-800 cursor-not-allowed'}`}
-                  >
-                      <Redo2 size={16} />
-                  </button>
-                </div>
             </div>
             <textarea 
               className="w-full bg-neutral-950 border border-neutral-800 rounded-[3px] p-3 text-sm focus:outline-none focus:border-pink-500 transition-colors resize-y min-h-[6rem]"
@@ -669,6 +689,7 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
 
         {/* Layers Section (Shift+1) */}
         <CollapsibleSection 
+            id="panel-layers"
             title="Layers" 
             icon={Layers} 
             isOpen={panelState.layers}
@@ -770,6 +791,7 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
           
           {/* Text Content (Shift+2) */}
           <CollapsibleSection 
+              id="panel-content"
               title="Text Content" 
               icon={Type} 
               isOpen={panelState.content}
@@ -792,6 +814,7 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
 
           {/* Typography (Shift+3) */}
           <CollapsibleSection 
+              id="panel-typography"
               title="Typography" 
               icon={Palette} 
               isOpen={panelState.typography}
@@ -910,6 +933,7 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
 
           {/* Appearance (Shift+4) */}
           <CollapsibleSection 
+              id="panel-appearance"
               title="Appearance" 
               icon={Palette} 
               isOpen={panelState.appearance}
@@ -948,6 +972,7 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
 
           {/* Transform (Shift+5) */}
           <CollapsibleSection 
+              id="panel-transform"
               title="Transform" 
               icon={Move} 
               isOpen={panelState.transform}
@@ -985,6 +1010,7 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
 
           {/* Path Tool (Shift+6) */}
           <CollapsibleSection 
+              id="panel-path"
               title="Path Tool" 
               icon={Route} 
               isOpen={panelState.path}
@@ -1047,6 +1073,7 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
 
           {/* Effects (Shift+7) */}
           <EffectsControls 
+            id="panel-effects"
             design={design} 
             update={(k, v) => updateLayer(k as keyof TextLayer, v)} 
             toggle={(k) => toggleLayer(k as keyof TextLayer)}
@@ -1056,6 +1083,7 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
 
           {/* Blending (Shift+8) */}
           <CollapsibleSection 
+            id="panel-blending"
             title="Blending" 
             icon={BoxSelect} 
             isOpen={panelState.blending}

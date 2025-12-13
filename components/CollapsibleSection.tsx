@@ -11,6 +11,7 @@ interface CollapsibleSectionProps {
   headerClassName?: string;
   isOpen?: boolean;
   onToggle?: () => void;
+  id?: string;
 }
 
 const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({ 
@@ -21,7 +22,8 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
   className = '',
   headerClassName = '',
   isOpen: controlledIsOpen,
-  onToggle: controlledOnToggle
+  onToggle: controlledOnToggle,
+  id
 }) => {
   const [internalIsOpen, setInternalIsOpen] = useState(defaultOpen);
 
@@ -37,7 +39,7 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
   };
 
   return (
-    <div className={`border-b border-neutral-800 ${className}`}>
+    <div id={id} className={`border-b border-neutral-800 ${className}`}>
       <button 
         onClick={handleToggle}
         className={`w-full flex items-center justify-between py-4 px-6 hover:bg-neutral-800/30 transition-colors group focus:outline-none ${headerClassName}`}

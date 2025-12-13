@@ -1,6 +1,4 @@
 
-
-
 import React from 'react';
 import { DesignState, TextLayer } from '../types';
 import { CircleDashed, Square, Ban, Compass, Lightbulb } from 'lucide-react';
@@ -13,15 +11,17 @@ interface EffectsControlsProps {
   toggle: (key: keyof TextLayer) => void;
   isOpen: boolean;
   onToggle: () => void;
+  id?: string;
 }
 
-const EffectsControls: React.FC<EffectsControlsProps> = ({ design, update, toggle, isOpen, onToggle }) => {
+const EffectsControls: React.FC<EffectsControlsProps> = ({ design, update, toggle, isOpen, onToggle, id }) => {
   const activeLayer = design.layers.find(l => l.id === design.activeLayerId);
   
   if (!activeLayer) return null;
 
   return (
     <CollapsibleSection 
+        id={id}
         title="Effects" 
         icon={CircleDashed} 
         isOpen={isOpen}
