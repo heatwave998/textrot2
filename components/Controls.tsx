@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useMemo, forwardRef, useImperativeHandle, useRef } from 'react';
 import { DesignState, FontFamily, AspectRatio, TextLayer, AppSettings, GenModel, ImageResolution } from '../types';
 import { 
@@ -9,7 +8,7 @@ import {
   AlignLeft, AlignCenter, AlignRight, Move, Activity,
   Maximize, MoveHorizontal, MoveVertical, Undo2, Redo2, ToggleRight, ToggleLeft, Paintbrush,
   Plus, Eye, EyeOff, ChevronUp, ChevronDown, Wand2, BoxSelect, BookType, Link as LinkIcon, Stamp,
-  Sliders, ToggleLeft as ToggleOff, ToggleRight as ToggleOn, Globe
+  Sliders, ToggleLeft as ToggleOff, ToggleRight as ToggleOn, Globe, Copy
 } from 'lucide-react';
 import SliderControl from './SliderControl';
 import EffectsControls from './EffectsControls';
@@ -384,6 +383,37 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
       }));
   };
 
+  const handleDuplicateLayer = (id: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+      setDesign(prev => {
+          const originalLayer = prev.layers.find(l => l.id === id);
+          if (!originalLayer) return prev;
+
+          const newId = crypto.randomUUID();
+          const newLayer: TextLayer = {
+              ...originalLayer,
+              id: newId,
+              name: `${originalLayer.name} Copy`,
+              // Deep copy objects
+              overlayPosition: { ...originalLayer.overlayPosition },
+              fontVariations: { ...originalLayer.fontVariations },
+              pathPoints: originalLayer.pathPoints.map(p => ({ ...p })),
+          };
+
+          const index = prev.layers.findIndex(l => l.id === id);
+          const newLayers = [...prev.layers];
+          // Insert after the original (visually above in stack)
+          newLayers.splice(index + 1, 0, newLayer);
+
+          return {
+              ...prev,
+              layers: newLayers,
+              activeLayerId: newId,
+              selectedLayerIds: [newId]
+          };
+      });
+  };
+
   const handleDeleteLayer = (id: string, e: React.MouseEvent) => {
       e.stopPropagation();
       setLayerToDelete(id);
@@ -475,41 +505,41 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
     <div className="h-full flex flex-col bg-neutral-900 border-l border-neutral-800 overflow-hidden">
       
       {/* Header */}
-      <div className="p-6 border-b border-neutral-800 flex items-start justify-between bg-neutral-900 shrink-0 z-10">
-        <div>
-            <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-pink-300 to-violet-700 mb-1">
+      <div className="p-6 border-b border-neutral-800 flex items-center justify-between bg-neutral-900 shrink-0 z-10">
+        <div className="flex items-center gap-4">
+            <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-pink-300 to-violet-700 items-center flex gap-3">
             ///textrot studio
             </h2>
-        </div>
-        <div className="flex items-center gap-1">
-            <Tooltip content="Undo (Ctrl+Z)" position="bottom">
-                <button 
-                    onClick={onUndo}
-                    disabled={!canUndo}
-                    className={`p-2 rounded-[3px] transition-colors ${canUndo ? 'text-neutral-500 hover:text-white hover:bg-neutral-800' : 'text-neutral-800 cursor-not-allowed'}`}
-                >
-                    <Undo2 size={20} />
-                </button>
-            </Tooltip>
-            <Tooltip content="Redo (Ctrl+⇧+Z)" position="bottom">
-                <button 
-                    onClick={onRedo}
-                    disabled={!canRedo}
-                    className={`p-2 rounded-[3px] transition-colors ${canRedo ? 'text-neutral-500 hover:text-white hover:bg-neutral-800' : 'text-neutral-800 cursor-not-allowed'}`}
-                >
-                    <Redo2 size={20} />
-                </button>
-            </Tooltip>
-            
-            <div className="w-px h-5 bg-neutral-800 mx-1"></div>
+            <div className="flex items-center gap-1">
+                <Tooltip content="Undo (Ctrl+Z)" position="bottom">
+                    <button 
+                        onClick={onUndo}
+                        disabled={!canUndo}
+                        className={`p-2 rounded-[3px] transition-colors ${canUndo ? 'text-neutral-500 hover:text-white hover:bg-neutral-800' : 'text-neutral-800 cursor-not-allowed'}`}
+                    >
+                        <Undo2 size={20} />
+                    </button>
+                </Tooltip>
+                <Tooltip content="Redo (Ctrl+⇧+Z)" position="bottom">
+                    <button 
+                        onClick={onRedo}
+                        disabled={!canRedo}
+                        className={`p-2 rounded-[3px] transition-colors ${canRedo ? 'text-neutral-500 hover:text-white hover:bg-neutral-800' : 'text-neutral-800 cursor-not-allowed'}`}
+                    >
+                        <Redo2 size={20} />
+                    </button>
+                </Tooltip>
+                
+                <div className="w-px h-5 bg-neutral-800 mx-1"></div>
 
-            <button 
-                onClick={onOpenSettings}
-                className="text-neutral-500 hover:text-white transition-colors p-2 rounded-[3px] hover:bg-neutral-800"
-                title="Settings"
-            >
-                <Settings size={20} />
-            </button>
+                <button 
+                    onClick={onOpenSettings}
+                    className="text-neutral-500 hover:text-white transition-colors p-2 rounded-[3px] hover:bg-neutral-800"
+                    title="Settings"
+                >
+                    <Settings size={20} />
+                </button>
+            </div>
         </div>
       </div>
 
@@ -760,6 +790,9 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
                                  <button onClick={(e) => handleToggleVisible(layer.id, e)} className="p-1 hover:text-white">
                                      {layer.visible ? <Eye size={12}/> : <EyeOff size={12}/>}
                                  </button>
+                                 <button onClick={(e) => handleDuplicateLayer(layer.id, e)} className="p-1 hover:text-white" title="Duplicate Layer">
+                                     <Copy size={12}/>
+                                 </button>
                                  <button onClick={(e) => handleDeleteLayer(layer.id, e)} className="p-1 hover:text-red-400">
                                      <Trash2 size={12}/>
                                  </button>
@@ -776,7 +809,7 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
                     <div className="mt-3 flex gap-2 animate-in slide-in-from-top-1 fade-in">
                         <button 
                             onClick={() => onStamp(design.selectedLayerIds)}
-                            className="w-full py-2 bg-neutral-800 hover:bg-neutral-700 text-white rounded-[3px] text-xs font-medium flex items-center justify-center gap-2 border border-neutral-700/50 transition-colors"
+                            className="w-full py-2 bg-neutral-800 hover:bg-neutral-700 text-white rounded-[8px] text-xs font-medium flex items-center justify-center gap-2 border border-neutral-700/50 transition-colors"
                         >
                             <Stamp size={14} />
                             {design.selectedLayerIds.length > 1 ? 'Stamp Selected' : 'Stamp Layer'}
@@ -853,7 +886,8 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
                       <button onClick={() => updateLayer('textAlign', 'right')} className={`flex-1 h-8 rounded-[3px] flex items-center justify-center ${activeLayer.textAlign === 'right' ? 'bg-neutral-800 text-white' : 'text-neutral-400 hover:text-white'}`}><AlignRight size={16} /></button>
                   </div>
                   <div className="flex gap-1 bg-neutral-950 rounded-[3px] p-1 border border-neutral-800">
-                      
+                      <button onClick={() => toggleLayer('flipX')} className={`w-8 h-8 rounded-[3px] hover:bg-neutral-800 flex items-center justify-center ${activeLayer.flipX ? 'bg-neutral-800 text-pink-500' : 'text-neutral-400'}`} title="Flip Horizontal"><FlipHorizontal size={16} /></button>
+                      <button onClick={() => toggleLayer('flipY')} className={`w-8 h-8 rounded-[3px] hover:bg-neutral-800 flex items-center justify-center ${activeLayer.flipY ? 'bg-neutral-800 text-pink-500' : 'text-neutral-400'}`} title="Flip Vertical"><FlipVertical size={16} /></button>
                   </div>
             </div>
 
@@ -904,11 +938,6 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
                  </div>
             )}
             
-            <div className="flex gap-1 bg-neutral-950 rounded-[3px] p-1 border border-neutral-800 mb-2">
-                  <button onClick={() => toggleLayer('flipX')} className={`flex-1 h-8 rounded-[3px] hover:bg-neutral-800 flex items-center justify-center ${activeLayer.flipX ? 'bg-neutral-800 text-pink-500' : 'text-neutral-400'}`}><FlipHorizontal size={16} /></button>
-                  <button onClick={() => toggleLayer('flipY')} className={`flex-1 h-8 rounded-[3px] hover:bg-neutral-800 flex items-center justify-center ${activeLayer.flipY ? 'bg-neutral-800 text-pink-500' : 'text-neutral-400'}`}><FlipVertical size={16} /></button>
-            </div>
-
             <SliderControl label="Kerning" icon={AlignCenterHorizontal} value={activeLayer.letterSpacing} setValue={(v) => updateLayer('letterSpacing', v)} min="-20" max="100" step="1" suffix="px" defaultValue={0} />
             <SliderControl label="Letter Rotate" icon={RotateCw} value={activeLayer.letterRotation} setValue={(v) => updateLayer('letterRotation', v)} min="-180" max="180" step="1" suffix="°" defaultValue={0} />
             

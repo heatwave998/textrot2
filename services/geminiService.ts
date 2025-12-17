@@ -64,6 +64,13 @@ const getApiAspectRatio = (aspectRatio: AspectRatio, orientation: Orientation): 
     return orientation === 'portrait' ? '3:4' : '4:3';
 };
 
+const SAFETY_SETTINGS = [
+    { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+    { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
+    { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_ONLY_HIGH' },
+    { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' },
+];
+
 export interface GeneratedImageResult {
     imageData: string;
     groundingMetadata?: any;
@@ -93,7 +100,8 @@ export const generateBackgroundImage = async (
     const config: any = {
         imageConfig: {
             aspectRatio: targetRatio,
-        }
+        },
+        safetySettings: SAFETY_SETTINGS
     };
 
     // Only Gemini 3 Pro Image Preview supports 'imageSize' and 'googleSearch'
@@ -247,7 +255,8 @@ export const editImage = async (
     const config: any = {
         imageConfig: {
             aspectRatio: targetRatio,
-        }
+        },
+        safetySettings: SAFETY_SETTINGS
     };
 
     // Only Gemini 3 Pro Image Preview supports 'imageSize' and 'googleSearch'

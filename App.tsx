@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import Canvas, { CanvasHandle } from './components/Canvas';
 import Controls, { ControlsHandle } from './components/Controls';
@@ -171,6 +170,9 @@ export default function App() {
     } else if (errorMsg.includes('500') || errorMsg.includes('Internal') || errorMsg.includes('Server Error')) {
         title = 'Server Error (500)';
         message = 'The Gemini service encountered an internal error. This is usually temporary. Please try again.';
+    } else if (errorMsg.includes('IMAGE_RECITATION')) {
+        title = 'Recitation Check Failed';
+        message = 'The AI generated content that too closely resembles existing copyrighted works or the source image. Please try modifying your prompt or using a different input image.';
     } else if (errorMsg.includes('Safety') || errorMsg.includes('blocked') || errorMsg.includes('finish reason')) {
         title = 'Content Blocked';
         message = 'The request was blocked by safety filters. Please modify your prompt and try again. ' + (errorMsg ? `\nDetails: ${errorMsg}` : '');
