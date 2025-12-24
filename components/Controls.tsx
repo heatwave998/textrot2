@@ -83,6 +83,11 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
   
   const textInputRef = useRef<HTMLTextAreaElement>(null);
 
+  // Platform Detection for Tooltips
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.userAgent);
+  const modKey = isMac ? '⌘' : 'Ctrl';
+  const altKey = isMac ? '⌥' : 'Alt';
+
   // Panel State for Keyboard Shortcuts
   const [panelState, setPanelState] = useState({
     gen: true,
@@ -511,7 +516,7 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
             ///textrot studio
             </h2>
             <div className="flex items-center gap-1">
-                <Tooltip content="Undo (Ctrl+Z)" position="bottom">
+                <Tooltip content={`Undo (${modKey}+Z)`} position="bottom">
                     <button 
                         onClick={onUndo}
                         disabled={!canUndo}
@@ -520,7 +525,7 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
                         <Undo2 size={20} />
                     </button>
                 </Tooltip>
-                <Tooltip content="Redo (Ctrl+⇧+Z)" position="bottom">
+                <Tooltip content={`Redo (${modKey}+Shift+Z)`} position="bottom">
                     <button 
                         onClick={onRedo}
                         disabled={!canRedo}
@@ -626,17 +631,17 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
 
             {/* MOVED UP: Utility Buttons */}
             <div className="flex gap-2 h-9">
-                <Tooltip content="Reset / Blank Canvas" position="bottom" className="flex-1">
+                <Tooltip content={`Reset / Blank Canvas (${altKey}+N)`} position="bottom" className="flex-1">
                     <button onClick={onBlank} className="w-full h-full bg-neutral-800 hover:bg-neutral-700 text-white rounded-[3px] flex items-center justify-center gap-2 text-xs font-medium border border-neutral-700/50 transition-colors"> 
                         <FilePlus size={14} /> Blank
                     </button>
                 </Tooltip>
-                <Tooltip content="Upload Image" position="bottom" className="flex-1">
+                <Tooltip content={`Upload Image (${altKey}+U)`} position="bottom" className="flex-1">
                     <button onClick={onUpload} className="w-full h-full bg-neutral-800 hover:bg-neutral-700 text-white rounded-[3px] flex items-center justify-center gap-2 text-xs font-medium border border-neutral-700/50 transition-colors"> 
                         <ImagePlus size={14} /> Upload
                     </button>
                 </Tooltip>
-                <Tooltip content="Load from URL" position="bottom" className="flex-1">
+                <Tooltip content={`Load from URL (${altKey}+L)`} position="bottom" className="flex-1">
                     <button onClick={onUrlImport} className="w-full h-full bg-neutral-800 hover:bg-neutral-700 text-white rounded-[3px] flex items-center justify-center gap-2 text-xs font-medium border border-neutral-700/50 transition-colors"> 
                         <LinkIcon size={14} /> Link
                     </button>

@@ -6,6 +6,7 @@ import ConfirmationModal from './components/ConfirmationModal';
 import ErrorModal from './components/ErrorModal';
 import UrlImportModal from './components/UrlImportModal';
 import LoadingOverlay from './components/LoadingOverlay';
+import KeyboardShortcutsModal from './components/KeyboardShortcutsModal';
 import { DesignState, AppSettings, AspectRatio, Orientation, Point, TextLayer } from './types';
 import { generateBackgroundImage, editImage } from './services/geminiService';
 import { useKeyboard, KeyboardShortcut } from './hooks/useKeyboard';
@@ -106,6 +107,7 @@ export default function App() {
   const [isBlankConfirmOpen, setIsBlankConfirmOpen] = useState(false);
   const [isGenerateConfirmOpen, setIsGenerateConfirmOpen] = useState(false);
   const [isUrlImportOpen, setIsUrlImportOpen] = useState(false);
+  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   
   // Error State
   const [errorState, setErrorState] = useState<{ isOpen: boolean; title: string; message: string }>({
@@ -642,13 +644,34 @@ export default function App() {
   const shortcuts: KeyboardShortcut[] = [
     {
         id: 'undo',
-        combo: { key: 'z', ctrl: true }, 
+        combo: { code: 'KeyZ', ctrl: true }, 
         action: handleUndo
     },
     {
         id: 'redo',
-        combo: { key: 'z', ctrl: true, shift: true },
+        combo: { code: 'KeyZ', ctrl: true, shift: true },
         action: handleRedo
+    },
+    {
+        id: 'shortcuts',
+        combo: { code: 'Slash', shift: true }, 
+        action: () => setIsShortcutsOpen(prev => !prev)
+    },
+    // FILE OPERATIONS
+    {
+        id: 'blank',
+        combo: { code: 'KeyN', alt: true }, 
+        action: handleBlankClick
+    },
+    {
+        id: 'upload',
+        combo: { code: 'KeyU', alt: true }, 
+        action: handleUploadTrigger
+    },
+    {
+        id: 'import-url',
+        combo: { code: 'KeyL', alt: true }, 
+        action: () => setIsUrlImportOpen(true)
     }
   ];
   useKeyboard(shortcuts);
@@ -722,6 +745,12 @@ export default function App() {
         isOpen={isUrlImportOpen}
         onClose={() => setIsUrlImportOpen(false)}
         onImport={handleUrlImport}
+      />
+
+      {/* Shortcuts Modal */}
+      <KeyboardShortcutsModal
+        isOpen={isShortcutsOpen}
+        onClose={() => setIsShortcutsOpen(false)}
       />
 
       {/* Confirmation Modal for Blank Canvas */}
