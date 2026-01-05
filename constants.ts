@@ -33,8 +33,8 @@ export const COLOR_FONTS: FontFamily[] = [
 
 export const FONTS: FontFamily[] = [
   'Abril Fatface', 'Alfa Slab One', 'Amatic SC', 'Anton', 'Audiowide', 'Bangers', 'Bebas Neue', 'Bodoni Moda', 'Bruno Ace SC', 'Bungee', 'Bungee Shade', 'Butcherman', 'Cinzel',
-  'Cormorant Garamond', 'Creepster', 'Crimson Text', 'Diplomata', 'DM Serif Display', 'Dancing Script', 'DotGothic16', 'Eater', 'Eduardo Tunni', 'Ewert', 'Exo 2', 'Fascinate Inline', 'Finger Paint', 'Fira Code',
-  'Foldit', 'Fraunces', 'Frijole', 'Geostar', 'Gloria Hallelujah', 'Great Vibes', 'Grenze Gotisch', 'Handjet', 'Honk', 'Inter', 'Italiana', 'Jacquard 12', 'Jersey 10', 'Josefin Sans', 'Kablammo', 'Kalnia Glaze', 'Krona One', 'Lato', 'League Gothic', 'Libre Baskerville',
+  'Cormorant Garamond', 'Creepster', 'Crimson Text', 'Diplomata', 'DM Serif Display', 'Dancing Script', 'DotGothic16', 'Doto', 'Eater', 'Eduardo Tunni', 'Ewert', 'Exo 2', 'Fascinate Inline', 'Finger Paint', 'Fira Code',
+  'Foldit', 'Fraunces', 'Frijole', 'Geostar', 'Gloria Hallelujah', 'Gluten', 'Great Vibes', 'Grenze Gotisch', 'Handjet', 'Honk', 'Inter', 'Italiana', 'Jacquard 12', 'Jersey 10', 'Josefin Sans', 'Kablammo', 'Kalnia Glaze', 'Krona One', 'Lato', 'League Gothic', 'Libre Baskerville',
   'Lobster', 'Lora', 'Major Mono Display', 'Megrim', 'Merriweather', 'Metal Mania', 'Michroma', 'Micro 5', 'Monoton', 'Montserrat', 'Nabla', 'Nosifer', 'Noto Sans', 'Oi', 'Open Sans', 'Orbitron', 'Oswald', 'Oxanium',
   'PT Sans', 'PT Serif', 'Pacifico', 'Permanent Marker', 'Piedra', 'Pixelify Sans', 'Plaster', 'Playfair Display', 'Poiret One', 'Poppins', 'Press Start 2P', 'Quantico', 'Raleway', 'Righteous',
   'Roboto', 'Rock Salt', 
@@ -71,6 +71,12 @@ export const VARIABLE_FONTS: Partial<Record<FontFamily, VariableFontConfig>> = {
       // though Google Fonts mainly exposes wght and ital.
     ]
   },
+  'Doto': {
+    axes: [
+      { tag: 'wght', name: 'Weight', min: 100, max: 900, defaultValue: 400, step: 1 },
+      { tag: 'ROND', name: 'Roundness', min: 0, max: 100, defaultValue: 0, step: 1 }
+    ]
+  },
   'Fraunces': {
     axes: [
       { tag: 'wght', name: 'Weight', min: 100, max: 900, defaultValue: 400, step: 10 },
@@ -78,6 +84,12 @@ export const VARIABLE_FONTS: Partial<Record<FontFamily, VariableFontConfig>> = {
       { tag: 'SOFT', name: 'Softness', min: 0, max: 100, defaultValue: 0, step: 1 },
       // Change WONK to a toggle with step 1 (0 or 1)
       { tag: 'WONK', name: 'Wonkiness', min: 0, max: 1, defaultValue: 0, step: 1, inputType: 'toggle' }
+    ]
+  },
+  'Gluten': {
+    axes: [
+      { tag: 'wght', name: 'Weight', min: 100, max: 900, defaultValue: 400, step: 1 },
+      { tag: 'slnt', name: 'Slant', min: -13, max: 13, defaultValue: 0, step: 1 }
     ]
   },
   'Handjet': {
@@ -235,13 +247,13 @@ export const getFontCategory = (font: FontFamily): string => {
     [FONT_CATEGORIES.HANDWRITING]: [
         'Dancing Script', 'Pacifico', 'Shadows Into Light', 'Amatic SC', 
         'Gloria Hallelujah', 'Permanent Marker', 'Great Vibes', 'Rock Salt', 
-        'Finger Paint', 'Lobster', 'Eduardo Tunni'
+        'Finger Paint', 'Lobster', 'Eduardo Tunni', 'Gluten'
     ],
     [FONT_CATEGORIES.MONO]: [
         'Fira Code', 'Space Mono'
     ],
     [FONT_CATEGORIES.DOT_MATRIX]: [
-        'DotGothic16', 'Silkscreen', 'VT323'
+        'DotGothic16', 'Silkscreen', 'VT323', 'Doto'
     ],
     [FONT_CATEGORIES.LED]: [
         'Handjet'

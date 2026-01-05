@@ -1,4 +1,5 @@
 
+
 import React, { useRef, useState, forwardRef, useImperativeHandle, useEffect, useCallback, useLayoutEffect } from 'react';
 import { DesignState, Point, TextLayer } from '../types';
 import { Upload, Maximize2, PenTool, RotateCw, Move as MoveIcon } from 'lucide-react';
@@ -97,7 +98,9 @@ const constructCanvasFont = (layer: TextLayer, fontSizePx: number): string => {
     let style = layer.isItalic ? 'italic' : 'normal';
     if (layer.fontVariations && layer.fontVariations['slnt'] !== undefined) {
         const slnt = layer.fontVariations['slnt'];
-        if (slnt !== 0) style = `oblique ${Math.abs(slnt)}deg`;
+        // Use negative slnt for oblique angle because OpenType slnt is usually negative for clockwise slant,
+        // while CSS oblique angle is positive for clockwise slant.
+        if (slnt !== 0) style = `oblique ${-slnt}deg`;
     }
     return `${style} normal ${weight} ${stretch} ${fontSizePx}px/1 ${fontFamily}`;
 };
@@ -1041,7 +1044,9 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                   
                   let fontStyle = layer.isItalic ? 'italic' : 'normal';
                   if (layer.fontVariations && layer.fontVariations['slnt'] !== undefined && layer.fontVariations['slnt'] !== 0) {
-                      fontStyle = `oblique ${Math.abs(layer.fontVariations['slnt'])}deg`;
+                      // Use negative slnt for oblique angle because OpenType slnt is usually negative for clockwise slant,
+                      // while CSS oblique angle is positive for clockwise slant.
+                      fontStyle = `oblique ${-layer.fontVariations['slnt']}deg`;
                   }
 
                   // Wrapper style handles global blending and opacity for the "apply as a whole" effect
