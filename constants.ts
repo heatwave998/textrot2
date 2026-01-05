@@ -43,7 +43,7 @@ export const FONTS: FontFamily[] = [
   'Rubik Gemstones', 'Rubik Glitch', 'Rubik Glitch Pop', 'Rubik Iso', 'Rubik Lines', 'Rubik Maps', 'Rubik Marker Hatch', 'Rubik Maze', 'Rubik Microbe', 'Rubik Mono One', 
   'Rubik Moonrocks', 'Rubik Pixels', 'Rubik Puddles', 'Rubik Scribble', 'Rubik Spray Paint', 'Rubik Storm', 'Rubik Vinyl', 'Rubik Wet Paint', 
   'Rye', 'Sancreek', 'Shadows Into Light', 'Share Tech Mono', 'Shojumaru', 'Silkscreen', 'Sixtyfour', 'Slackey', 'Smokum', 'Sora', 'Source Sans 3', 'Space Grotesk', 'Space Grotesque', 'Space Mono', 'Special Elite', 'Syne',
-  'Turret Road', 'Unbounded', 'UnifrakturMaguntia', 'VT323', 'Vast Shadow', 'Wallpoet', 'Workbench', 'Zen Dots'
+  'Tilt Warp', 'Turret Road', 'Unbounded', 'UnifrakturMaguntia', 'VT323', 'Vast Shadow', 'Wallpoet', 'Workbench', 'Zen Dots'
 ];
 
 // Variable Font Axis Definition
@@ -204,6 +204,12 @@ export const VARIABLE_FONTS: Partial<Record<FontFamily, VariableFontConfig>> = {
         { tag: 'MORF', name: 'Morph', min: 0, max: 45, defaultValue: 0, step: 0.1 },
         { tag: 'SHLN', name: 'Shadow Length', min: 0, max: 100, defaultValue: 0, step: 1 }
     ]
+  },
+  'Tilt Warp': {
+    axes: [
+      { tag: 'XROT', name: 'X Rotation', min: -45, max: 45, defaultValue: 0, step: 1 },
+      { tag: 'YROT', name: 'Y Rotation', min: -45, max: 45, defaultValue: 0, step: 1 }
+    ]
   }
 };
 
@@ -278,7 +284,7 @@ export const getFontCategory = (font: FontFamily): string => {
         'Ewert', 'Grenze Gotisch', 'Vast Shadow', 'Workbench', 'Slackey', 'Smokum', 'Oi'
     ],
     [FONT_CATEGORIES.FANCY]: [
-        'Fraunces'
+        'Fraunces', 'Tilt Warp'
     ]
   };
 

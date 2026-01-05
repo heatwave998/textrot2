@@ -205,6 +205,7 @@ export type FontFamily =
   | 'Space Mono' 
   | 'Special Elite'
   | 'Syne'
+  | 'Tilt Warp'
   | 'Turret Road'
   | 'Unbounded'
   | 'UnifrakturMaguntia'
