@@ -1,5 +1,6 @@
 
-import React, { useState, useMemo } from 'react';
+
+import React, { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Search, Type, Sliders } from 'lucide-react';
 import { FontFamily } from '../types';
@@ -10,16 +11,28 @@ interface FontBookModalProps {
   onClose: () => void;
   onSelect: (font: FontFamily) => void;
   currentFont: FontFamily;
+  initialSearchTerm?: string;
 }
 
 const FontBookModal: React.FC<FontBookModalProps> = ({ 
   isOpen, 
   onClose, 
   onSelect, 
-  currentFont 
+  currentFont,
+  initialSearchTerm
 }) => {
   const [activeCategory, setActiveCategory] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Update search query when initialSearchTerm changes or modal opens with a term
+  useEffect(() => {
+    if (isOpen && initialSearchTerm) {
+        setSearchQuery(initialSearchTerm);
+        setActiveCategory('All');
+    } else if (isOpen && !initialSearchTerm) {
+        setSearchQuery('');
+    }
+  }, [isOpen, initialSearchTerm]);
 
   const categories = ['All', ...Object.values(FONT_CATEGORIES)];
 

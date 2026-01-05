@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, MousePointer2, Settings, Cloud, Key, Check, Loader2, Terminal, MessageSquareQuote, Star, ChevronDown } from 'lucide-react';
+import { X, MousePointer2, Settings, Cloud, Key, Check, Loader2, Terminal, MessageSquareQuote, Star, ChevronDown, Wrench, Type } from 'lucide-react';
 import { AppSettings } from '../types';
 
 interface SettingsModalProps {
@@ -24,7 +24,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   settings, 
   onSettingsChange 
 }) => {
-  const [activeTab, setActiveTab] = useState<'general' | 'services'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'services' | 'advanced'>('general');
   
   // Validation State
   const [isValidating, setIsValidating] = useState(false);
@@ -49,6 +49,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const toggleZoom = () => {
     onSettingsChange({ ...settings, enableZoom: !settings.enableZoom });
+  };
+  
+  const toggleFontDebug = () => {
+      onSettingsChange({ ...settings, showFontDebug: !settings.showFontDebug });
   };
 
   const updateApiKey = (key: string) => {
@@ -165,6 +169,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 }`}
             >
                 <Cloud size={14} /> AI Services
+            </button>
+            <button
+                onClick={() => setActiveTab('advanced')}
+                className={`flex-1 py-3 text-xs font-medium flex items-center justify-center gap-2 transition-colors ${
+                    activeTab === 'advanced' 
+                    ? 'text-white bg-neutral-800 border-b-2 border-pink-500' 
+                    : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800/50'
+                }`}
+            >
+                <Wrench size={14} /> Advanced
             </button>
         </div>
 
@@ -325,6 +339,31 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     )}
                 </div>
             </div>
+          )}
+          
+          {activeTab === 'advanced' && (
+             <div className="space-y-6 animate-in slide-in-from-right-2 fade-in duration-200">
+                {/* Option: Font Debug */}
+                <div className="flex items-center justify-between group">
+                    <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-[3px] ${settings.showFontDebug ? 'bg-pink-500/10 text-pink-500' : 'bg-neutral-800 text-neutral-500'}`}>
+                            <Type size={20} />
+                        </div>
+                        <div>
+                            <h3 className="text-sm font-medium text-white">Font Diagnostics</h3>
+                            <p className="text-xs text-neutral-500">Show Google Fonts loading status overlay</p>
+                        </div>
+                    </div>
+                    
+                    {/* Toggle Switch */}
+                    <button 
+                        onClick={toggleFontDebug}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none ${settings.showFontDebug ? 'bg-pink-500' : 'bg-neutral-700'}`}
+                    >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${settings.showFontDebug ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                </div>
+             </div>
           )}
 
         </div>

@@ -155,12 +155,6 @@ const calculateStandardLayout = (ctx: CanvasRenderingContext2D, layer: TextLayer
         let cursorX = lineX;
         metric.chars.forEach(char => {
              const w = ctx.measureText(char).width;
-             // Draw at center of char for accurate rotation
-             // Since we use TextBaseline TOP, Y is the top of the line.
-             // We want the char box to rotate around its center.
-             // Visual center of char box is cursorX + w/2 (plus half spacing?)
-             // CSS includes spacing in the box. 
-             // Center of the box [Char | Space] is (w + spacing)/2
              
              const boxWidth = w + scaledLetterSpacing;
              const charCenterX = cursorX + (boxWidth / 2) - (scaledLetterSpacing / 2); // Center of the glyph itself
@@ -307,18 +301,28 @@ const drawLayerToCtx = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: 
              const sX = dist * Math.cos(angleRad);
              const sY = dist * Math.sin(angleRad);
 
-             // Reduced blur factor significantly to match visual crispness of CSS
-             // Changed from 0.5 to 0.25 to align canvas filter blur with CSS text-shadow blur
-             const shadowBlurPx = (layer.shadowBlur / 100) * fontSizePx * 0.25;
+             // Restore multiplier to 0.5 to match CSS text-shadow visual blur strength
+             const shadowBlurPx = (layer.shadowBlur / 100) * fontSizePx * 0.5;
 
-             ctx.filter = `blur(${shadowBlurPx}px)`;
-             ctx.fillStyle = hexToRgba(layer.shadowColor, layer.shadowOpacity ?? 1);
+             // FIX: Use native Canvas shadow properties instead of filter for robust export.
+             // We use the "offscreen casting" technique: draw the text far off-canvas,
+             // and use a large shadow offset to cast the shadow back onto the visible area.
+             // This ensures only the shadow is visible, and blurring is handled natively by the engine.
+             
+             const OFFSCREEN_OFFSET = 100000; 
+
+             ctx.shadowColor = hexToRgba(layer.shadowColor, layer.shadowOpacity ?? 1);
+             ctx.shadowBlur = shadowBlurPx;
+             ctx.shadowOffsetX = OFFSCREEN_OFFSET + sX;
+             ctx.shadowOffsetY = sY;
+             ctx.fillStyle = "#000000"; // Dummy color for the offscreen text (must be opaque to cast shadow)
 
              layout.forEach(item => {
                  ctx.save();
-                 ctx.translate(item.x + offsetX, item.y + offsetY);
+                 // Move text offscreen to the left (relative to its own rotation frame)
+                 ctx.translate(item.x + offsetX - OFFSCREEN_OFFSET, item.y + offsetY);
                  ctx.rotate(item.r * Math.PI / 180);
-                 ctx.translate(sX, sY);
+                 // No need to translate sX, sY here as it's handled by shadowOffset relative to the draw origin
                  ctx.fillText(item.char, 0, 0);
                  ctx.restore();
              });
@@ -860,7 +864,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
           scratchCtx.imageSmoothingQuality = 'high';
           
           if (isPreview && !forceUseCanvas) {
-              // No-op for visual text
+              // No-op for visual text (React rendered overlays)
           } else {
               // EXPORT MODE or FALLBACK: Use Native Canvas Renderer
               await document.fonts.ready;
@@ -892,7 +896,8 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
           bufferCtx.save();
           bufferCtx.setTransform(1, 0, 0, 1, 0, 0); 
           
-          bufferCtx.globalAlpha = 1; 
+          // Apply opacity and blend mode here to composite the entire layer as a whole
+          bufferCtx.globalAlpha = layer.opacity; 
           
           const gcoMap: Record<string, GlobalCompositeOperation> = {
               'normal': 'source-over',
@@ -1039,6 +1044,19 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                       fontStyle = `oblique ${Math.abs(layer.fontVariations['slnt'])}deg`;
                   }
 
+                  // Wrapper style handles global blending and opacity for the "apply as a whole" effect
+                  const wrapperStyle: React.CSSProperties = {
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: '100%',
+                      pointerEvents: 'none',
+                      zIndex: design.layers.findIndex(l => l.id === layer.id) * 10,
+                      mixBlendMode: layer.blendMode === 'normal' ? 'normal' : layer.blendMode as any,
+                      opacity: layer.opacity,
+                  };
+
                   // --- SHADOW SETUP (Independent of Text Shadow property for main text) ---
                   let shadowString = 'none';
                   if (layer.hasShadow) {
@@ -1051,7 +1069,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                         shadowString = `${sX}px ${sY}px ${sBlur}px ${sColor}`;
                   }
 
-                  // Base container style
+                  // Base container style for internal components
                   const baseStyle: React.CSSProperties = {
                       position: 'absolute',
                       fontFamily: `"${layer.fontFamily}"`,
@@ -1064,10 +1082,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                       fontSynthesis: 'style weight',
                       WebkitFontSmoothing: 'antialiased',
                       MozOsxFontSmoothing: 'grayscale',
-                      opacity: layer.opacity,
-                      mixBlendMode: layer.blendMode === 'normal' ? 'normal' : layer.blendMode as any,
-                      zIndex: design.layers.findIndex(l => l.id === layer.id) * 10,
-                      textShadow: 'none', // We manage this manually
+                      textShadow: 'none',
                   };
 
                   // --- CONTENT RENDERER ---
@@ -1102,9 +1117,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                                 }
                            }
                            
-                           // If shadow is explicitly provided (e.g. Shadow Pass), use it.
-                           // Otherwise, keep it 'none' from baseStyle unless main pass needs it?
-                           // Actually, we use a separate pass for shadow, so Main pass should have 'none'.
                            if (hasExplicitShadow) {
                                modeStyle.textShadow = extraStyle.textShadow;
                            }
@@ -1186,11 +1198,6 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                   };
 
                   // --- RENDER PASSES ---
-                  // 1. Shadow Layer
-                  // 2. Echo Layer
-                  // 3. Glitch Layer
-                  // 4. Main Layer
-
                   const renderShadow = () => {
                       if (!layer.hasShadow) return null;
                       return renderContent('fill', {
@@ -1199,7 +1206,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                           WebkitTextStroke: '0px transparent',
                           backgroundImage: 'none',
                           textShadow: shadowString,
-                          zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 1,
+                          zIndex: 1,
                           mixBlendMode: 'normal'
                       });
                   }
@@ -1219,15 +1226,13 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                             echoes.push(
                                 <React.Fragment key={`echo-${i}`}>
                                 {renderContent('fill', {
-                                    // Apply transform translation in Local Space (same as Canvas)
-                                    // This means rotation happens first, then translation.
                                     transform: layer.pathPoints.length > 0 
                                        ? `translate(${dx}px, ${dy}px)` 
                                        : `translate(-50%, -50%) rotate(${layer.rotation}deg) scale(${layer.flipX ? -1 : 1}, ${layer.flipY ? -1 : 1}) translate(${dx}px, ${dy}px)`,
                                     color: layer.textColor,
-                                    opacity: alpha * layer.opacity,
+                                    opacity: alpha, // Use local alpha, global opacity handled by wrapper
                                     textShadow: 'none', 
-                                    zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 2,
+                                    zIndex: 2,
                                     pointerEvents: 'none',
                                     mixBlendMode: 'normal'
                                 })}
@@ -1270,7 +1275,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                                                 ? `translate(${dx}px, ${dy}px)` 
                                                 : `translate(-50%, -50%) rotate(${layer.rotation}deg) scale(${layer.flipX ? -1 : 1}, ${layer.flipY ? -1 : 1}) translate(${dx}px, ${dy}px)`,
                                                 color: color,
-                                                zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 3, 
+                                                zIndex: 3, 
                                                 opacity: layer.rainbowOpacity,
                                                 filter: `blur(${layer.rainbowBlur}px)`,
                                                 pointerEvents: 'none',
@@ -1291,7 +1296,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                                            ? `translate(${-dx}px, ${-dy}px)` 
                                            : `translate(-50%, -50%) rotate(${layer.rotation}deg) scale(${layer.flipX ? -1 : 1}, ${layer.flipY ? -1 : 1}) translate(${-dx}px, ${-dy}px)`,
                                         color: layer.effectColor,
-                                        zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 3,
+                                        zIndex: 3,
                                         opacity: 1,
                                         filter: 'blur(1px)',
                                         pointerEvents: 'none',
@@ -1302,7 +1307,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                                            ? `translate(${dx}px, ${dy}px)` 
                                            : `translate(-50%, -50%) rotate(${layer.rotation}deg) scale(${layer.flipX ? -1 : 1}, ${layer.flipY ? -1 : 1}) translate(${dx}px, ${dy}px)`,
                                         color: layer.effectColor2,
-                                        zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 3,
+                                        zIndex: 3,
                                         opacity: 1,
                                         filter: 'blur(1px)',
                                         pointerEvents: 'none',
@@ -1314,15 +1319,15 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
                   }
 
                   return (
-                    <React.Fragment key={layer.id}>
+                    <div key={layer.id} style={wrapperStyle}>
                         {renderShadow()}
                         {renderEchoes()}
                         {renderGlitch()}
                         
                         {/* Main Layer */}
-                        {layer.hasOutline && renderContent('outline', { zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 4 })}
-                        {renderContent('fill', { zIndex: (design.layers.findIndex(l => l.id === layer.id) * 10) + 4 })}
-                    </React.Fragment>
+                        {layer.hasOutline && renderContent('outline', { zIndex: 4 })}
+                        {renderContent('fill', { zIndex: 4 })}
+                    </div>
                   );
               })}
           </div>

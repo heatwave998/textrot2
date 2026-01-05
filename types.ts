@@ -14,6 +14,8 @@ export type FontFamily =
   | 'Bangers'
   | 'Bebas Neue'
   | 'Bodoni Moda'
+  | 'Bruno Ace SC'
+  | 'Bungee'
   | 'Bungee Shade'
   | 'Butcherman'
   | 'Cinzel' 
@@ -27,6 +29,7 @@ export type FontFamily =
   | 'Eater'
   | 'Eduardo Tunni'
   | 'Ewert'
+  | 'Exo 2'
   | 'Fascinate Inline'
   | 'Finger Paint'
   | 'Fira Code'
@@ -37,6 +40,7 @@ export type FontFamily =
   | 'Gloria Hallelujah'
   | 'Great Vibes'
   | 'Grenze Gotisch'
+  | 'Handjet'
   | 'Inter' 
   | 'Italiana'
   | 'Jacquard 12'
@@ -99,6 +103,7 @@ export type FontFamily =
   | 'Slackey'
   | 'Smokum'
   | 'Source Sans 3'
+  | 'Space Grotesk'
   | 'Space Grotesque'
   | 'Space Mono' 
   | 'Special Elite'
@@ -205,4 +210,5 @@ export interface AppSettings {
   quality: string;
   generationSystemPrompt: string;
   editingSystemPrompt: string;
+  showFontDebug: boolean;
 }

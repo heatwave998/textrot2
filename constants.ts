@@ -1,4 +1,5 @@
 
+
 import { FontFamily } from './types';
 
 export const FONT_CATEGORIES = {
@@ -8,16 +9,26 @@ export const FONT_CATEGORIES = {
   HANDWRITING: 'Handwriting',
   MONO: 'Monospace',
   ALIEN: 'Alien / Sci-Fi',
-  FANCY: 'Fancy'
+  FANCY: 'Fancy',
+  // New Categories
+  DOT_MATRIX: 'Dot Matrix',
+  LED: 'LED',
+  FUTURISTIC: 'Futuristic',
+  TECH: 'Tech',
+  ELECTRO: 'Electro',
+  GAMER: 'Gamer',
+  RETRO_SIGNAGE: '80s / Signage',
+  TECH_FUTURE: 'Tech / Future',
+  EXPERIMENTAL: 'Experimental'
 };
 
 export const FONTS: FontFamily[] = [
-  'Abril Fatface', 'Alfa Slab One', 'Amatic SC', 'Anton', 'Audiowide', 'Bangers', 'Bebas Neue', 'Bodoni Moda', 'Bungee Shade', 'Butcherman', 'Cinzel',
-  'Cormorant Garamond', 'Creepster', 'Crimson Text', 'Diplomata', 'DM Serif Display', 'Dancing Script', 'DotGothic16', 'Eater', 'Eduardo Tunni', 'Ewert', 'Fascinate Inline', 'Finger Paint', 'Fira Code',
-  'Foldit', 'Fraunces', 'Frijole', 'Geostar', 'Gloria Hallelujah', 'Great Vibes', 'Grenze Gotisch', 'Inter', 'Italiana', 'Jacquard 12', 'Jersey 10', 'Josefin Sans', 'Kablammo', 'Krona One', 'Lato', 'League Gothic', 'Libre Baskerville',
+  'Abril Fatface', 'Alfa Slab One', 'Amatic SC', 'Anton', 'Audiowide', 'Bangers', 'Bebas Neue', 'Bodoni Moda', 'Bruno Ace SC', 'Bungee', 'Bungee Shade', 'Butcherman', 'Cinzel',
+  'Cormorant Garamond', 'Creepster', 'Crimson Text', 'Diplomata', 'DM Serif Display', 'Dancing Script', 'DotGothic16', 'Eater', 'Eduardo Tunni', 'Ewert', 'Exo 2', 'Fascinate Inline', 'Finger Paint', 'Fira Code',
+  'Foldit', 'Fraunces', 'Frijole', 'Geostar', 'Gloria Hallelujah', 'Great Vibes', 'Grenze Gotisch', 'Handjet', 'Inter', 'Italiana', 'Jacquard 12', 'Jersey 10', 'Josefin Sans', 'Kablammo', 'Krona One', 'Lato', 'League Gothic', 'Libre Baskerville',
   'Lobster', 'Lora', 'Major Mono Display', 'Megrim', 'Merriweather', 'Metal Mania', 'Michroma', 'Micro 5', 'Monoton', 'Montserrat', 'Nosifer', 'Noto Sans', 'Oi', 'Open Sans', 'Orbitron', 'Oswald', 'Oxanium',
   'PT Sans', 'PT Serif', 'Pacifico', 'Permanent Marker', 'Piedra', 'Pixelify Sans', 'Plaster', 'Playfair Display', 'Poiret One', 'Poppins', 'Press Start 2P', 'Quantico', 'Raleway', 'Righteous',
-  'Roboto', 'Rock Salt', 'Rubik 80s Fade', 'Rubik Beastly', 'Rubik Burned', 'Rubik Glitch', 'Rubik Iso', 'Rubik Marker Hatch', 'Rubik Microbe', 'Rubik Puddles', 'Rubik Wet Paint', 'Rye', 'Sancreek', 'Shadows Into Light', 'Share Tech Mono', 'Shojumaru', 'Silkscreen', 'Sixtyfour', 'Slackey', 'Smokum', 'Source Sans 3', 'Space Grotesque', 'Space Mono', 'Special Elite', 'Syne',
+  'Roboto', 'Rock Salt', 'Rubik 80s Fade', 'Rubik Beastly', 'Rubik Burned', 'Rubik Glitch', 'Rubik Iso', 'Rubik Marker Hatch', 'Rubik Microbe', 'Rubik Puddles', 'Rubik Wet Paint', 'Rye', 'Sancreek', 'Shadows Into Light', 'Share Tech Mono', 'Shojumaru', 'Silkscreen', 'Sixtyfour', 'Slackey', 'Smokum', 'Source Sans 3', 'Space Grotesk', 'Space Grotesque', 'Space Mono', 'Special Elite', 'Syne',
   'Turret Road', 'Unbounded', 'UnifrakturMaguntia', 'VT323', 'Vast Shadow', 'Wallpoet', 'Workbench', 'Zen Dots'
 ];
 
@@ -53,6 +64,23 @@ export const VARIABLE_FONTS: Partial<Record<FontFamily, VariableFontConfig>> = {
       { tag: 'SOFT', name: 'Softness', min: 0, max: 100, defaultValue: 0, step: 1 },
       // Change WONK to a toggle with step 1 (0 or 1)
       { tag: 'WONK', name: 'Wonkiness', min: 0, max: 1, defaultValue: 0, step: 1, inputType: 'toggle' }
+    ]
+  },
+  'Handjet': {
+    axes: [
+      { tag: 'wght', name: 'Weight', min: 100, max: 900, defaultValue: 400, step: 1 },
+      { tag: 'ELGR', name: 'Grid Size', min: 1, max: 2, defaultValue: 1, step: 0.1 },
+      { tag: 'ELSH', name: 'Element Shape', min: 0, max: 16, defaultValue: 0, step: 0.1 }
+    ]
+  },
+  'Exo 2': {
+    axes: [
+      { tag: 'wght', name: 'Weight', min: 100, max: 900, defaultValue: 400, step: 1 }
+    ]
+  },
+  'Space Grotesk': {
+    axes: [
+      { tag: 'wght', name: 'Weight', min: 300, max: 700, defaultValue: 400, step: 1 }
     ]
   },
   'Inter': {
@@ -144,7 +172,7 @@ export const getFontCategory = (font: FontFamily): string => {
     [FONT_CATEGORIES.SANS]: [
         'Inter', 'Roboto', 'Open Sans', 'Lato', 'Montserrat', 'Poppins', 'Raleway', 'Oswald', 
         'Noto Sans', 'Source Sans 3', 'PT Sans', 'Josefin Sans', 'Anton', 'Bebas Neue', 
-        'League Gothic', 'Space Grotesque', 'Unbounded', 'Syne', 'Quantico'
+        'League Gothic', 'Space Grotesque', 'Unbounded', 'Quantico'
     ],
     [FONT_CATEGORIES.SERIF]: [
         'Merriweather', 'Playfair Display', 'Lora', 'PT Serif', 'Crimson Text', 
@@ -157,14 +185,41 @@ export const getFontCategory = (font: FontFamily): string => {
         'Finger Paint', 'Lobster', 'Eduardo Tunni'
     ],
     [FONT_CATEGORIES.MONO]: [
-        'Fira Code', 'Space Mono', 'VT323'
+        'Fira Code', 'Space Mono'
+    ],
+    [FONT_CATEGORIES.DOT_MATRIX]: [
+        'DotGothic16', 'Silkscreen', 'VT323'
+    ],
+    [FONT_CATEGORIES.LED]: [
+        'Handjet'
+    ],
+    [FONT_CATEGORIES.FUTURISTIC]: [
+        'Orbitron', 'Michroma'
+    ],
+    [FONT_CATEGORIES.TECH]: [
+        'Exo 2'
+    ],
+    [FONT_CATEGORIES.ELECTRO]: [
+        'Bruno Ace SC'
+    ],
+    [FONT_CATEGORIES.GAMER]: [
+        'Press Start 2P', 'Pixelify Sans'
+    ],
+    [FONT_CATEGORIES.RETRO_SIGNAGE]: [
+        'Bungee'
+    ],
+    [FONT_CATEGORIES.TECH_FUTURE]: [
+        'Space Grotesk'
+    ],
+    [FONT_CATEGORIES.EXPERIMENTAL]: [
+        'Syne'
     ],
     [FONT_CATEGORIES.ALIEN]: [
-        'Audiowide', 'Orbitron', 'Michroma', 'Turret Road', 'Zen Dots', 'Megrim', 
+        'Audiowide', 'Turret Road', 'Zen Dots', 'Megrim', 
         'Press Start 2P', 'Wallpoet', 'Rubik Glitch', 'Rubik Beastly', 'Rubik Microbe', 'Rubik Wet Paint',
         'Frijole', 'Butcherman', 'Creepster', 'Eater', 'Metal Mania', 'Nosifer', 'Piedra', 'Sancreek',
-        'Sixtyfour', 'Silkscreen', 'DotGothic16', 'Major Mono Display', 'Share Tech Mono', 'Oxanium', 
-        'Krona One', 'Jacquard 12', 'Jersey 10', 'Pixelify Sans', 'Micro 5'
+        'Sixtyfour', 'Share Tech Mono', 'Oxanium', 
+        'Krona One', 'Jacquard 12', 'Jersey 10', 'Micro 5'
     ],
     [FONT_CATEGORIES.DISPLAY]: [
         'Alfa Slab One', 'Bangers', 'Bungee Shade', 'Fascinate Inline', 'Monoton', 

@@ -87,7 +87,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   imageResolution: '1K',
   quality: 'Photorealistic, 8k, highly detailed',
   generationSystemPrompt: 'Cinematic lighting, negative space for text overlay, polished design aesthetic.',
-  editingSystemPrompt: 'Maintain photorealism.'
+  editingSystemPrompt: 'Maintain photorealism.',
+  showFontDebug: false
 };
 
 interface ImageHistoryItem {
@@ -139,6 +140,14 @@ export default function App() {
   useEffect(() => {
     showLoadingDebugRef.current = showLoadingDebug;
   }, [showLoadingDebug]);
+
+  // Sync settings with DOM Overlay for Font Debug
+  useEffect(() => {
+    const debugEl = document.getElementById('font-loading-debug');
+    if (debugEl) {
+        debugEl.style.display = settings.showFontDebug ? 'flex' : 'none';
+    }
+  }, [settings.showFontDebug]);
 
   // Helper: Log to Loading Overlay
   const log = (message: string) => {

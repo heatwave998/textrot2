@@ -1,4 +1,6 @@
-import React, { useState, useCallback, useMemo, forwardRef, useImperativeHandle, useRef } from 'react';
+
+
+import React, { useState, useCallback, useMemo, forwardRef, useImperativeHandle, useRef, useEffect } from 'react';
 import { DesignState, FontFamily, AspectRatio, TextLayer, AppSettings, GenModel, ImageResolution } from '../types';
 import { 
   Type, Palette, Layers, Download, Sparkles, 
@@ -80,6 +82,7 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
   const [layerToDelete, setLayerToDelete] = useState<string | null>(null);
   const [hoveredControl, setHoveredControl] = useState<string | null>(null);
   const [isFontBookOpen, setIsFontBookOpen] = useState(false);
+  const [fontBookSearchOverride, setFontBookSearchOverride] = useState<string | undefined>(undefined);
   
   const textInputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -87,6 +90,22 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
   const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.userAgent);
   const modKey = isMac ? '⌘' : 'Ctrl';
   const altKey = isMac ? '⌥' : 'Alt';
+
+  // Listen for Debug Font Selection from DOM Overlay
+  useEffect(() => {
+    const handleDebugFontSelect = (e: CustomEvent) => {
+        const fontName = e.detail;
+        if (fontName) {
+            setFontBookSearchOverride(fontName);
+            setIsFontBookOpen(true);
+        }
+    };
+
+    window.addEventListener('textrot-open-font' as any, handleDebugFontSelect as any);
+    return () => {
+        window.removeEventListener('textrot-open-font' as any, handleDebugFontSelect as any);
+    };
+  }, []);
 
   // Panel State for Keyboard Shortcuts
   const [panelState, setPanelState] = useState({
@@ -511,40 +530,39 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
       
       {/* Header */}
       <div className="p-6 border-b border-neutral-800 flex items-center justify-between bg-neutral-900 shrink-0 z-10">
-        <div className="flex items-center gap-4">
-            <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-pink-300 to-violet-700 items-center flex gap-3">
-            ///textrot studio
-            </h2>
-            <div className="flex items-center gap-1">
-                <Tooltip content={`Undo (${modKey}+Z)`} position="bottom">
-                    <button 
-                        onClick={onUndo}
-                        disabled={!canUndo}
-                        className={`p-2 rounded-[3px] transition-colors ${canUndo ? 'text-neutral-500 hover:text-white hover:bg-neutral-800' : 'text-neutral-800 cursor-not-allowed'}`}
-                    >
-                        <Undo2 size={20} />
-                    </button>
-                </Tooltip>
-                <Tooltip content={`Redo (${modKey}+Shift+Z)`} position="bottom">
-                    <button 
-                        onClick={onRedo}
-                        disabled={!canRedo}
-                        className={`p-2 rounded-[3px] transition-colors ${canRedo ? 'text-neutral-500 hover:text-white hover:bg-neutral-800' : 'text-neutral-800 cursor-not-allowed'}`}
-                    >
-                        <Redo2 size={20} />
-                    </button>
-                </Tooltip>
-                
-                <div className="w-px h-5 bg-neutral-800 mx-1"></div>
+        <h2 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-pink-300 to-violet-700 items-center flex gap-3">
+        ///textrot studio
+        </h2>
 
+        <div className="flex items-center gap-1">
+            <Tooltip content={`Undo (${modKey}+Z)`} position="bottom">
                 <button 
-                    onClick={onOpenSettings}
-                    className="text-neutral-500 hover:text-white transition-colors p-2 rounded-[3px] hover:bg-neutral-800"
-                    title="Settings"
+                    onClick={onUndo}
+                    disabled={!canUndo}
+                    className={`p-2 rounded-[3px] transition-colors ${canUndo ? 'text-neutral-500 hover:text-white hover:bg-neutral-800' : 'text-neutral-800 cursor-not-allowed'}`}
                 >
-                    <Settings size={20} />
+                    <Undo2 size={20} />
                 </button>
-            </div>
+            </Tooltip>
+            <Tooltip content={`Redo (${modKey}+Shift+Z)`} position="bottom">
+                <button 
+                    onClick={onRedo}
+                    disabled={!canRedo}
+                    className={`p-2 rounded-[3px] transition-colors ${canRedo ? 'text-neutral-500 hover:text-white hover:bg-neutral-800' : 'text-neutral-800 cursor-not-allowed'}`}
+                >
+                    <Redo2 size={20} />
+                </button>
+            </Tooltip>
+            
+            <div className="w-px h-5 bg-neutral-800 mx-1"></div>
+
+            <button 
+                onClick={onOpenSettings}
+                className="text-neutral-500 hover:text-white transition-colors p-2 rounded-[3px] hover:bg-neutral-800"
+                title="Settings"
+            >
+                <Settings size={20} />
+            </button>
         </div>
       </div>
 
@@ -861,7 +879,10 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
             
             {/* Font Book Button */}
             <button 
-                onClick={() => setIsFontBookOpen(true)}
+                onClick={() => {
+                    setFontBookSearchOverride(undefined); // Clear override when opening normally
+                    setIsFontBookOpen(true);
+                }}
                 className="w-full bg-neutral-950 border border-neutral-800 rounded-[3px] p-2 text-left flex items-center justify-between hover:border-neutral-600 transition-colors group mb-3"
             >
                 <div className="flex items-center gap-3">
@@ -1183,6 +1204,7 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
             onClose={() => setIsFontBookOpen(false)}
             onSelect={(font) => updateLayer('fontFamily', font)}
             currentFont={activeLayer.fontFamily}
+            initialSearchTerm={fontBookSearchOverride}
         />
       )}
     </div>
