@@ -19,7 +19,7 @@ import FontBookModal from './FontBookModal';
 import CollapsibleSection from './CollapsibleSection';
 import Tooltip from './Tooltip';
 import { useIsKeyPressed, useKeyboard } from '../hooks/useKeyboard';
-import { FONTS, VARIABLE_FONTS } from '../constants';
+import { FONTS, VARIABLE_FONTS, COLOR_FONTS } from '../constants';
 
 interface ControlsProps {
   design: DesignState;
@@ -524,6 +524,11 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
 
   // Get Variable Axes for current font
   const variableConfig = activeLayer ? VARIABLE_FONTS[activeLayer.fontFamily] : undefined;
+  
+  // Check if current font is a Color Font
+  const isColorFont = activeLayer ? COLOR_FONTS.includes(activeLayer.fontFamily) : false;
+  // Check if specific feature disabling is needed (Honk handles its own shadow)
+  const isShadowDisabled = activeLayer ? activeLayer.fontFamily === 'Honk' : false;
 
   return (
     <div className="h-full flex flex-col bg-neutral-900 border-l border-neutral-800 overflow-hidden">
@@ -997,27 +1002,39 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
             <div className="grid grid-cols-2 gap-2">
               <div>
                   <div className="flex items-center mb-1 h-9"><label className="text-[10px] text-neutral-500 block">Text Color</label></div>
-                  <div className="flex items-center gap-2 bg-neutral-950 border border-neutral-800 rounded-[3px] p-1 h-10">
-                      <input type="color" value={activeLayer.textColor} onChange={(e) => updateLayer('textColor', e.target.value)} className="w-6 h-6 rounded-[3px] cursor-pointer bg-transparent border-none" />
-                      <span className="text-xs font-mono text-neutral-400">{activeLayer.textColor}</span>
+                  <div className={`flex items-center gap-2 bg-neutral-950 border border-neutral-800 rounded-[3px] p-1 h-10 ${isColorFont ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                      <input 
+                        type="color" 
+                        value={activeLayer.textColor} 
+                        onChange={(e) => updateLayer('textColor', e.target.value)} 
+                        disabled={isColorFont}
+                        className="w-6 h-6 rounded-[3px] cursor-pointer bg-transparent border-none disabled:cursor-not-allowed" 
+                      />
+                      <span className="text-xs font-mono text-neutral-400">{isColorFont ? 'Native' : activeLayer.textColor}</span>
                   </div>
+                  {isColorFont && <div className="text-[9px] text-neutral-600 mt-1 italic">Color Font (Native Colors)</div>}
               </div>
               
               <div>
                   <div className="flex items-center justify-between mb-1 h-9">
                       <label className="text-[10px] text-neutral-500">Shadow/Glow</label>
-                      <button onClick={() => toggleLayer('hasShadow')} className="text-neutral-500 hover:text-pink-500 transition-colors focus:outline-none flex items-center justify-end">
-                          {activeLayer.hasShadow ? <ToggleRight size={28} className="text-pink-500"/> : <ToggleLeft size={28}/>}
+                      <button 
+                        onClick={() => !isShadowDisabled && toggleLayer('hasShadow')} 
+                        disabled={isShadowDisabled}
+                        className={`text-neutral-500 transition-colors focus:outline-none flex items-center justify-end ${isShadowDisabled ? 'opacity-50 cursor-not-allowed' : 'hover:text-pink-500'}`}
+                      >
+                          {activeLayer.hasShadow ? <ToggleRight size={28} className={isShadowDisabled ? 'text-neutral-600' : 'text-pink-500'}/> : <ToggleLeft size={28}/>}
                       </button>
                   </div>
-                  <div className={`flex items-center gap-2 bg-neutral-950 border border-neutral-800 rounded-[3px] p-1 h-10 transition-opacity ${!activeLayer.hasShadow ? 'opacity-50 pointer-events-none' : ''}`}>
+                  <div className={`flex items-center gap-2 bg-neutral-950 border border-neutral-800 rounded-[3px] p-1 h-10 transition-opacity ${(!activeLayer.hasShadow || isShadowDisabled) ? 'opacity-50 pointer-events-none' : ''}`}>
                       <input type="color" value={activeLayer.shadowColor} onChange={(e) => updateLayer('shadowColor', e.target.value)} className="w-6 h-6 rounded-[3px] cursor-pointer bg-transparent border-none" />
                       <span className="text-xs font-mono text-neutral-400">{activeLayer.shadowColor}</span>
                   </div>
+                  {isShadowDisabled && <div className="text-[9px] text-neutral-600 mt-1 italic">Handled by Font Axis</div>}
               </div>
             </div>
 
-            <div className={`transition-opacity space-y-4 pt-4 ${!activeLayer.hasShadow ? 'opacity-50 pointer-events-none' : ''}`}>
+            <div className={`transition-opacity space-y-4 pt-4 ${(!activeLayer.hasShadow || isShadowDisabled) ? 'opacity-50 pointer-events-none' : ''}`}>
                 <SliderControl label="Shadow Blur" value={activeLayer.shadowBlur} setValue={(v) => updateLayer('shadowBlur', v)} min="0" max="100" step="1" defaultValue={20} />
                 <SliderControl label="Shadow Offset" value={activeLayer.shadowOffset} setValue={(v) => updateLayer('shadowOffset', v)} min="0" max="100" step="1" defaultValue={20} />
                 <SliderControl label="Shadow Angle" value={activeLayer.shadowAngle} setValue={(v) => updateLayer('shadowAngle', v)} min="0" max="360" step="1" suffix="°" defaultValue={45} />

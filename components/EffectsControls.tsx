@@ -1,9 +1,11 @@
 
+
 import React from 'react';
 import { DesignState, TextLayer } from '../types';
 import { CircleDashed, Square, Ban, Compass, Lightbulb } from 'lucide-react';
 import SliderControl from './SliderControl';
 import CollapsibleSection from './CollapsibleSection';
+import { COLOR_FONTS } from '../constants';
 
 interface EffectsControlsProps {
   design: DesignState;
@@ -18,6 +20,8 @@ const EffectsControls: React.FC<EffectsControlsProps> = ({ design, update, toggl
   const activeLayer = design.layers.find(l => l.id === design.activeLayerId);
   
   if (!activeLayer) return null;
+
+  const isColorFont = COLOR_FONTS.includes(activeLayer.fontFamily);
 
   return (
     <CollapsibleSection 
@@ -58,51 +62,74 @@ const EffectsControls: React.FC<EffectsControlsProps> = ({ design, update, toggl
         {/* Special FX Selector */}
         <div className="grid grid-cols-4 gap-1 bg-neutral-950 p-1 rounded-[3px] border border-neutral-800 mt-2">
             <button 
-            onClick={() => update('specialEffect', 'none')}
-            className={`p-2 h-12 rounded-[3px] flex items-center justify-center ${activeLayer.specialEffect === 'none' ? 'bg-neutral-800 text-white' : 'text-neutral-500 hover:text-white'}`}
-            title="No Effect"
+                onClick={() => update('specialEffect', 'none')}
+                className={`p-2 h-12 rounded-[3px] flex items-center justify-center ${activeLayer.specialEffect === 'none' ? 'bg-neutral-800 text-white' : 'text-neutral-500 hover:text-white'}`}
+                title="No Effect"
             >
-            <Ban size={24} />
+                <Ban size={24} />
             </button>
+            
             <button 
-            onClick={() => update('specialEffect', 'glitch')}
-            className={`p-2 h-12 rounded-[3px] flex items-center justify-center ${activeLayer.specialEffect === 'glitch' ? 'bg-neutral-800 text-pink-500' : 'text-neutral-500 hover:text-white'}`}
-            title="Glitch"
+                onClick={() => !isColorFont && update('specialEffect', 'glitch')}
+                disabled={isColorFont}
+                className={`p-2 h-12 rounded-[3px] flex items-center justify-center transition-all ${
+                    isColorFont 
+                    ? 'opacity-20 cursor-not-allowed grayscale' 
+                    : activeLayer.specialEffect === 'glitch' 
+                        ? 'bg-neutral-800 text-pink-500' 
+                        : 'text-neutral-500 hover:text-white'
+                }`}
+                title={isColorFont ? "Not available for Color Fonts" : "Glitch"}
             >
-            {/* Custom Glitch Icon */}
-            <div className="relative font-bold text-2xl leading-none">
-                <span className="absolute -left-[5px] -top-[1px] text-red-500 mix-blend-screen opacity-80">A</span>
-                <span className="absolute -right-[5px] -bottom-[1px] text-cyan-500 mix-blend-screen opacity-80">A</span>
-                <span className="relative text-white">A</span>
-            </div>
+                {/* Custom Glitch Icon */}
+                <div className="relative font-bold text-2xl leading-none">
+                    <span className="absolute -left-[5px] -top-[1px] text-red-500 mix-blend-screen opacity-80">A</span>
+                    <span className="absolute -right-[5px] -bottom-[1px] text-cyan-500 mix-blend-screen opacity-80">A</span>
+                    <span className="relative text-white">A</span>
+                </div>
             </button>
+            
             <button 
-            onClick={() => update('specialEffect', 'gradient')}
-            className={`p-2 h-12 rounded-[3px] flex items-center justify-center ${activeLayer.specialEffect === 'gradient' ? 'bg-neutral-800 text-violet-500' : 'text-neutral-500 hover:text-white'}`}
-            title="Gradient Fill"
+                onClick={() => !isColorFont && update('specialEffect', 'gradient')}
+                disabled={isColorFont}
+                className={`p-2 h-12 rounded-[3px] flex items-center justify-center transition-all ${
+                    isColorFont 
+                    ? 'opacity-20 cursor-not-allowed grayscale' 
+                    : activeLayer.specialEffect === 'gradient' 
+                        ? 'bg-neutral-800 text-violet-500' 
+                        : 'text-neutral-500 hover:text-white'
+                }`}
+                title={isColorFont ? "Not available for Color Fonts" : "Gradient Fill"}
             >
-            {/* Custom Gradient Icon */}
-            <div className="w-6 h-6 rounded-full bg-gradient-to-br from-white to-violet-500 border border-white/20"></div>
+                {/* Custom Gradient Icon */}
+                <div className="w-6 h-6 rounded-full bg-gradient-to-br from-white to-violet-500 border border-white/20"></div>
             </button>
+            
             <button 
-            onClick={() => update('specialEffect', 'echo')}
-            className={`p-2 h-12 rounded-[3px] flex items-center justify-center ${activeLayer.specialEffect === 'echo' ? 'bg-neutral-800 text-cyan-500' : 'text-neutral-500 hover:text-white'}`}
-            title="Echo / Motion Trail"
+                onClick={() => update('specialEffect', 'echo')}
+                className={`p-2 h-12 rounded-[3px] flex items-center justify-center ${activeLayer.specialEffect === 'echo' ? 'bg-neutral-800 text-cyan-500' : 'text-neutral-500 hover:text-white'}`}
+                title="Echo / Motion Trail"
             >
                 {/* Custom Echo Icon */}
                 <div className="relative font-bold text-2xl leading-none">
-                <span className="absolute -left-[10px] top-0 opacity-10">A</span>
-                <span className="absolute -left-[7px] top-0 opacity-30">A</span>
-                <span className="absolute -left-[5px] top-0 opacity-50">A</span>
-                <span className="absolute -left-[2px] top-0 opacity-70">A</span>
-                <span className="relative">A</span>
-            </div>
+                    <span className="absolute -left-[10px] top-0 opacity-10">A</span>
+                    <span className="absolute -left-[7px] top-0 opacity-30">A</span>
+                    <span className="absolute -left-[5px] top-0 opacity-50">A</span>
+                    <span className="absolute -left-[2px] top-0 opacity-70">A</span>
+                    <span className="relative">A</span>
+                </div>
             </button>
         </div>
+        
+        {isColorFont && (
+            <div className="text-[9px] text-neutral-600 mt-2 text-center italic">
+                Glitch & Gradients are disabled for Color Fonts
+            </div>
+        )}
 
         {/* Dynamic Controls based on Selection */}
         {activeLayer.specialEffect !== 'none' && (
-        <div className="bg-neutral-950 p-3 rounded-[3px] border border-neutral-800 animate-in slide-in-from-top-2 fade-in space-y-4">
+        <div className="bg-neutral-950 p-3 rounded-[3px] border border-neutral-800 animate-in slide-in-from-top-2 fade-in space-y-4 mt-2">
             
             {/* Rainbow Toggle for Glitch */}
             {activeLayer.specialEffect === 'glitch' && (
@@ -226,7 +253,7 @@ const EffectsControls: React.FC<EffectsControlsProps> = ({ design, update, toggl
 
         {/* Outline Config */}
         {activeLayer.hasOutline && (
-            <div className="bg-neutral-950 p-3 rounded-[3px] border border-neutral-800 animate-in slide-in-from-top-2 fade-in grid grid-cols-2 gap-2">
+            <div className="bg-neutral-950 p-3 rounded-[3px] border border-neutral-800 animate-in slide-in-from-top-2 fade-in grid grid-cols-2 gap-2 mt-2">
                 <div>
                     <label className="text-[10px] text-neutral-500 block mb-1">Width (px)</label>
                     <div className="bg-neutral-950 border border-neutral-800 rounded-[3px] p-1 h-[34px] flex items-center">

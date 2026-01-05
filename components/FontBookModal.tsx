@@ -77,29 +77,39 @@ const FontBookModal: React.FC<FontBookModalProps> = ({
         </div>
 
         {/* Toolbar */}
-        <div className="flex flex-col md:flex-row gap-4 p-4 border-b border-neutral-800 bg-neutral-900/50 shrink-0">
+        <div className="flex flex-col gap-4 p-4 border-b border-neutral-800 bg-neutral-900/50 shrink-0">
             {/* Search */}
-            <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" size={16} />
-                <input 
-                    type="text" 
-                    placeholder="Search fonts..." 
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full bg-neutral-950 border border-neutral-800 rounded-full py-2 pl-10 pr-4 text-sm text-white focus:outline-none focus:border-pink-500 transition-colors"
-                />
+            <div className="w-full">
+                <div className="relative w-full md:max-w-md">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500" size={16} />
+                    <input 
+                        type="text" 
+                        placeholder="Search fonts..." 
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="w-full bg-neutral-950 border border-neutral-800 rounded-full py-2.5 pl-10 pr-10 text-sm text-white focus:outline-none focus:border-pink-500 transition-colors placeholder:text-neutral-600"
+                    />
+                    {searchQuery && (
+                        <button 
+                            onClick={() => setSearchQuery('')}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 hover:text-white transition-colors p-1 rounded-full hover:bg-neutral-800"
+                        >
+                            <X size={14} />
+                        </button>
+                    )}
+                </div>
             </div>
             
-            {/* Categories */}
-            <div className="flex gap-2 overflow-x-auto pb-1 md:pb-0 custom-scrollbar">
+            {/* Categories - Wrapping Layout */}
+            <div className="flex flex-wrap gap-2">
                 {categories.map(cat => (
                     <button
                         key={cat}
                         onClick={() => setActiveCategory(cat)}
-                        className={`px-4 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
+                        className={`px-3 py-1.5 rounded-full text-[11px] font-medium transition-all border ${
                             activeCategory === cat 
-                            ? 'bg-white text-black font-bold' 
-                            : 'bg-neutral-800 text-neutral-400 hover:bg-neutral-700 hover:text-white'
+                            ? 'bg-white text-black border-white font-bold shadow-sm' 
+                            : 'bg-neutral-950 border-neutral-800 text-neutral-400 hover:bg-neutral-800 hover:text-white hover:border-neutral-700'
                         }`}
                     >
                         {cat}

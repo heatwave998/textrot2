@@ -1,8 +1,82 @@
+export type AspectRatio = '1:1' | '4:3' | '3:2' | '16:9';
 
+export type Orientation = 'landscape' | 'portrait';
 
-export enum DesignMode {
-  CREATE = 'CREATE',
-  EDIT = 'EDIT',
+export type GenModel = 'gemini-2.5-flash-image' | 'gemini-3-pro-image-preview';
+
+export type ImageResolution = '1K' | '2K' | '4K';
+
+export interface Point {
+  x: number;
+  y: number;
+}
+
+export interface TextLayer {
+  id: string;
+  name: string;
+  visible: boolean;
+  locked: boolean;
+  textOverlay: string;
+  fontFamily: FontFamily;
+  textColor: string;
+  shadowColor: string;
+  textSize: number;
+  letterSpacing: number;
+  letterRotation: number;
+  textAlign: 'left' | 'center' | 'right';
+  overlayPosition: { x: number; y: number };
+  blendMode: string;
+  opacity: number;
+  fontVariations: Record<string, number>;
+  pathPoints: Point[];
+  pathSmoothing: number;
+  isPathInputMode: boolean;
+  isPathMoveMode: boolean;
+  shadowBlur: number;
+  hasShadow: boolean;
+  shadowOffset: number;
+  shadowAngle: number;
+  shadowOpacity: number;
+  shadowGrow: number;
+  isBold: boolean;
+  isItalic: boolean;
+  isUppercase: boolean;
+  isHollow: boolean;
+  hasOutline: boolean;
+  outlineWidth: number;
+  outlineColor: string;
+  specialEffect: 'none' | 'glitch' | 'gradient' | 'echo';
+  effectIntensity: number;
+  effectColor: string;
+  effectColor2: string;
+  isRainbowGlitch: boolean;
+  isRainbowLights: boolean;
+  rainbowOpacity: number;
+  rainbowBlur: number;
+  effectAngle: number;
+  rotation: number;
+  flipX: boolean;
+  flipY: boolean;
+}
+
+export interface DesignState {
+  prompt: string;
+  aspectRatio: AspectRatio;
+  orientation: Orientation;
+  layers: TextLayer[];
+  activeLayerId: string | null;
+  selectedLayerIds: string[];
+}
+
+export interface AppSettings {
+  enableZoom: boolean;
+  googleApiKey: string;
+  imageModel: GenModel;
+  imageResolution: ImageResolution;
+  quality: string;
+  generationSystemPrompt: string;
+  editingSystemPrompt: string;
+  showFontDebug: boolean;
 }
 
 export type FontFamily = 
@@ -41,12 +115,14 @@ export type FontFamily =
   | 'Great Vibes'
   | 'Grenze Gotisch'
   | 'Handjet'
+  | 'Honk'
   | 'Inter' 
   | 'Italiana'
   | 'Jacquard 12'
   | 'Jersey 10'
   | 'Josefin Sans'
   | 'Kablammo'
+  | 'Kalnia Glaze'
   | 'Krona One'
   | 'Lato'
   | 'League Gothic'
@@ -61,6 +137,7 @@ export type FontFamily =
   | 'Micro 5'
   | 'Monoton'
   | 'Montserrat' 
+  | 'Nabla'
   | 'Nosifer'
   | 'Noto Sans'
   | 'Oi'
@@ -84,14 +161,33 @@ export type FontFamily =
   | 'Righteous'
   | 'Roboto'
   | 'Rock Salt'
+  | 'Rubik'
   | 'Rubik 80s Fade'
   | 'Rubik Beastly'
+  | 'Rubik Broken Fax'
+  | 'Rubik Bubbles'
   | 'Rubik Burned'
+  | 'Rubik Dirt'
+  | 'Rubik Distressed'
+  | 'Rubik Doodle Shadow'
+  | 'Rubik Doodle Triangles'
+  | 'Rubik Gemstones'
   | 'Rubik Glitch'
+  | 'Rubik Glitch Pop'
   | 'Rubik Iso'
+  | 'Rubik Lines'
+  | 'Rubik Maps'
   | 'Rubik Marker Hatch'
+  | 'Rubik Maze'
   | 'Rubik Microbe'
+  | 'Rubik Mono One'
+  | 'Rubik Moonrocks'
+  | 'Rubik Pixels'
   | 'Rubik Puddles'
+  | 'Rubik Scribble'
+  | 'Rubik Spray Paint'
+  | 'Rubik Storm'
+  | 'Rubik Vinyl'
   | 'Rubik Wet Paint'
   | 'Rye'
   | 'Sancreek'
@@ -102,6 +198,7 @@ export type FontFamily =
   | 'Sixtyfour'
   | 'Slackey'
   | 'Smokum'
+  | 'Sora'
   | 'Source Sans 3'
   | 'Space Grotesk'
   | 'Space Grotesque'
@@ -116,99 +213,3 @@ export type FontFamily =
   | 'Wallpoet'
   | 'Workbench'
   | 'Zen Dots';
-
-export type AspectRatio = '1:1' | '4:3' | '3:2' | '16:9';
-export type Orientation = 'landscape' | 'portrait';
-export type SpecialEffect = 'none' | 'glitch' | 'gradient' | 'echo';
-export type GenModel = 'gemini-3-pro-image-preview' | 'gemini-2.5-flash-image';
-export type ImageResolution = '1K' | '2K' | '4K';
-
-export interface Point {
-  x: number;
-  y: number;
-}
-
-export interface TextLayer {
-  id: string;
-  name: string;
-  visible: boolean;
-  locked: boolean;
-
-  textOverlay: string;
-  fontFamily: FontFamily;
-  textColor: string;
-  shadowColor: string;
-  textSize: number;
-  letterSpacing: number; // Kerning in em units (or pixels relative to font size)
-  letterRotation: number; // Rotation of individual letters in degrees
-  textAlign: 'left' | 'center' | 'right';
-  overlayPosition: { x: number; y: number }; // Percentages 0-100
-  blendMode: 'normal' | 'multiply' | 'screen' | 'overlay' | 'darken' | 'lighten' | 'color-dodge' | 'color-burn' | 'hard-light' | 'soft-light' | 'difference' | 'exclusion' | 'hue' | 'saturation' | 'color' | 'luminosity';
-  opacity: number;
-  
-  // Font Variations (Variable Fonts)
-  // Stores raw axis values like { 'wght': 700, 'wdth': 100, 'WONK': 1 }
-  fontVariations: Record<string, number>;
-
-  // Path / Curve Data
-  pathPoints: Point[]; // Array of coordinates relative to the image dimensions
-  pathSmoothing: number; // 0-20 iterations of smoothing
-  isPathInputMode: boolean; // If true, user is drawing on canvas instead of panning
-  isPathMoveMode: boolean; // If true, user is moving the existing path
-
-  // Shadow Controls
-  shadowBlur: number;
-  hasShadow: boolean;
-  shadowOffset: number; // 0-100
-  shadowAngle: number; // 0-360
-  shadowOpacity: number; // 0-1
-  shadowGrow: number; // 0-50 (Spread/Choke)
-
-  // Typography Modifiers
-  isBold: boolean;
-  isItalic: boolean;
-  isUppercase: boolean;
-  
-  // Effects
-  isHollow: boolean;
-  hasOutline: boolean;
-  outlineWidth: number;
-  outlineColor: string;
-
-  // Special FX
-  specialEffect: SpecialEffect;
-  effectIntensity: number; // 0-100. Glitch=Offset, Echo=Distance, Gradient=Spread
-  effectColor: string; // Primary Effect Color (Glitch Left / Gradient End)
-  effectColor2: string; // Secondary Effect Color (Glitch Right)
-  isRainbowGlitch: boolean; // Toggle for Rainbow Glitch
-  isRainbowLights: boolean; // Toggle for 'screen' blending mode vs 'normal' in Rainbow Glitch
-  rainbowOpacity: number; // 0-1 for rainbow layer opacity
-  rainbowBlur: number; // Blur amount for rainbow layers
-  effectAngle: number; // 0-360 for Gradient Angle and Echo Direction
-  
-  // Transforms
-  rotation: number; // 0-360
-  flipX: boolean;
-  flipY: boolean;
-}
-
-export interface DesignState {
-  prompt: string;
-  aspectRatio: AspectRatio;
-  orientation: Orientation;
-  
-  layers: TextLayer[];
-  activeLayerId: string | null;
-  selectedLayerIds: string[];
-}
-
-export interface AppSettings {
-  enableZoom: boolean;
-  googleApiKey: string;
-  imageModel: GenModel;
-  imageResolution: ImageResolution;
-  quality: string;
-  generationSystemPrompt: string;
-  editingSystemPrompt: string;
-  showFontDebug: boolean;
-}

@@ -1,4 +1,5 @@
 
+
 import React, { useRef, useState, forwardRef, useImperativeHandle, useEffect, useCallback, useLayoutEffect } from 'react';
 import { DesignState, Point, TextLayer } from '../types';
 import { Upload, Maximize2, PenTool, RotateCw, Move as MoveIcon } from 'lucide-react';
@@ -261,6 +262,9 @@ const drawLayerToCtx = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: 
 
     const isPath = layer.pathPoints.length > 0;
     
+    // Check if specific feature disabling is needed (Honk handles its own shadow)
+    const isHonk = layer.fontFamily === 'Honk';
+
     // 1. Calculate Layout (Chars with positions)
     const layout = isPath 
         ? calculatePathLayout(ctx, layer, fontSizePx)
@@ -390,7 +394,8 @@ const drawLayerToCtx = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: 
     // This ensures Shadow is absolutely at the bottom.
 
     // 1. Shadow Pass
-    if (layer.hasShadow) {
+    // Explicitly disable shadow pass for Honk, even if layer.hasShadow is true
+    if (layer.hasShadow && !isHonk) {
         renderPass('#000000', 0, 0, 0, 1, 'source-over', 'shadow-only');
     }
 
@@ -1032,6 +1037,8 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
             }}
           >
               {layersToRender.map(layer => {
+                  const isHonk = layer.fontFamily === 'Honk';
+
                   const variationSettings = getFontVariationSettings(layer);
                   const fontSizePx = (layer.textSize / 100) * imgDims.w;
                   
@@ -1059,7 +1066,8 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
 
                   // --- SHADOW SETUP (Independent of Text Shadow property for main text) ---
                   let shadowString = 'none';
-                  if (layer.hasShadow) {
+                  // Explicitly disable shadow string calculation for Honk
+                  if (layer.hasShadow && !isHonk) {
                         const angleRad = (layer.shadowAngle * Math.PI) / 180;
                         const shadowDist = (layer.shadowOffset / 100) * fontSizePx;
                         const sX = shadowDist * Math.cos(angleRad);
@@ -1199,7 +1207,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
 
                   // --- RENDER PASSES ---
                   const renderShadow = () => {
-                      if (!layer.hasShadow) return null;
+                      if (!layer.hasShadow || isHonk) return null; // Explicitly disable shadow DOM for Honk
                       return renderContent('fill', {
                           color: 'transparent',
                           WebkitTextFillColor: 'transparent',
