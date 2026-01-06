@@ -102,7 +102,8 @@ const constructCanvasFont = (layer: TextLayer, fontSizePx: number): string => {
         // while CSS oblique angle is positive for clockwise slant.
         if (slnt !== 0) style = `oblique ${-slnt}deg`;
     }
-    return `${style} normal ${weight} ${stretch} ${fontSizePx}px/1 ${fontFamily}`;
+    // Canvas 2D font parser can be strict. Remove /1 line-height shorthand.
+    return `${style} normal ${weight} ${stretch} ${fontSizePx}px ${fontFamily}`;
 };
 
 const getFontVariationSettings = (layer: TextLayer): string => {
@@ -965,6 +966,22 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
           textCanvasRef.current.height = imgDims.h;
           renderToContext(ctx, imgDims.w, imgDims.h, design.layers, true, true);
       }
+  }, [imgDims, design, renderToContext]);
+
+  // Font Load Listener: Trigger redraw when fonts become available
+  useEffect(() => {
+    const handleFontLoad = () => {
+        // Force update by triggering render if dimensions exist
+        if (textCanvasRef.current && imgDims) {
+            const ctx = textCanvasRef.current.getContext('2d');
+            renderToContext(ctx, imgDims.w, imgDims.h, design.layers, true, true);
+        }
+    };
+    
+    document.fonts.addEventListener('loadingdone', handleFontLoad);
+    return () => {
+        document.fonts.removeEventListener('loadingdone', handleFontLoad);
+    };
   }, [imgDims, design, renderToContext]);
 
   // Export Logic
