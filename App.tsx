@@ -1,3 +1,5 @@
+
+
 import React, { useState, useRef, useEffect } from 'react';
 import Canvas, { CanvasHandle } from './components/Canvas';
 import Controls, { ControlsHandle } from './components/Controls';
@@ -340,6 +342,9 @@ export default function App() {
         ...prev,
         layers: newLayers
       }));
+      
+      // Reset view for fresh generation
+      canvasRef.current?.resetView();
       log("Scene updated successfully.");
       
       setIsGenerating(false);
@@ -399,6 +404,7 @@ export default function App() {
 
           log("Response received. Updating canvas...");
           addToHistory(imageData, design.aspectRatio, design.orientation, design.layers, groundingMetadata);
+          // Do NOT reset view for Edit (Inpainting)
           log("Edit complete.");
           
           setIsGenerating(false);
@@ -459,6 +465,9 @@ export default function App() {
         activeLayerId: newId,
         selectedLayerIds: [newId]
     }));
+    
+    // Reset view for new blank canvas
+    canvasRef.current?.resetView();
     setIsBlankConfirmOpen(false);
   };
 
@@ -523,6 +532,9 @@ export default function App() {
                 orientation: newOrientation,
                 layers: cleanLayers
             }));
+            
+            // Reset view for new upload
+            canvasRef.current?.resetView();
         };
         img.src = result;
       }
@@ -614,6 +626,7 @@ export default function App() {
           });
 
           setImageSrc(newImageSrc);
+          // Do NOT reset view on Stamp
           
           setDesign(prev => {
               const newActiveId = remainingLayers.length > 0 ? remainingLayers[remainingLayers.length - 1].id : null;

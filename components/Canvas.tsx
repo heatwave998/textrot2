@@ -19,6 +19,7 @@ export interface CanvasHandle {
   exportImage: () => Promise<string>;
   triggerFileUpload: () => void;
   stampLayers: (layerIds: string[]) => Promise<string>;
+  resetView: () => void;
 }
 
 // Helper: Hex to RGB
@@ -35,6 +36,12 @@ const hexToRgb = (hex: string) => {
 const hexToRgba = (hex: string, alpha: number) => {
     const rgb = hexToRgb(hex);
     return `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${alpha})`;
+};
+
+// Helper: Check if font supports external CSS shadows
+const isShadowSupported = (fontFamily: string) => {
+    // Honk has baked-in shadows/3D effects controlled by axes
+    return fontFamily !== 'Honk'; 
 };
 
 // Helper: Iterative Weighted Moving Average for Smoothing
@@ -394,7 +401,7 @@ const drawLayerToCtx = (ctx: CanvasRenderingContext2D, layer: TextLayer, width: 
     // This ensures Shadow is absolutely at the bottom.
 
     // 1. Shadow Pass
-    if (layer.hasShadow) {
+    if (layer.hasShadow && isShadowSupported(layer.fontFamily)) {
         renderPass('#000000', 0, 0, 0, 1, 'source-over', 'shadow-only');
     }
 
@@ -570,10 +577,14 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
       return canvas;
   };
 
+  const resetView = useCallback(() => {
+      setZoomScale(1);
+      setPan({ x: 0, y: 0 });
+  }, []);
+
   useEffect(() => {
-    setZoomScale(1);
-    setPan({ x: 0, y: 0 });
-    
+    // Only reset if imageSrc effectively clears (e.g. going back to null)
+    // We do NOT auto-reset zoom on imageSrc change anymore to support Stamping/Undoing
     if (imageSrc) {
         const i = new Image();
         i.crossOrigin = "anonymous";
@@ -628,8 +639,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
 
   const handleCanvasDoubleClick = (e: React.MouseEvent) => {
       if (imageSrc) {
-          setZoomScale(1);
-          setPan({ x: 0, y: 0 });
+          resetView();
       }
   };
 
@@ -1029,8 +1039,9 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
   useImperativeHandle(ref, () => ({
     exportImage: generateExport,
     triggerFileUpload: () => fileInputRef.current?.click(),
-    stampLayers: stampLayers
-  }), [generateExport, stampLayers]);
+    stampLayers: stampLayers,
+    resetView: resetView
+  }), [generateExport, stampLayers, resetView]);
 
   // --- DOM Overlay Renderer ---
   const renderTextLayersOverlay = () => {
@@ -1081,7 +1092,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
 
                   // --- SHADOW SETUP (Independent of Text Shadow property for main text) ---
                   let shadowString = 'none';
-                  if (layer.hasShadow) {
+                  if (layer.hasShadow && isShadowSupported(layer.fontFamily)) {
                         const angleRad = (layer.shadowAngle * Math.PI) / 180;
                         const shadowDist = (layer.shadowOffset / 100) * fontSizePx;
                         const sX = shadowDist * Math.cos(angleRad);
@@ -1221,7 +1232,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
 
                   // --- RENDER PASSES ---
                   const renderShadow = () => {
-                      if (!layer.hasShadow) return null;
+                      if (!layer.hasShadow || !isShadowSupported(layer.fontFamily)) return null;
                       return renderContent('fill', {
                           color: 'transparent',
                           WebkitTextFillColor: 'transparent',
