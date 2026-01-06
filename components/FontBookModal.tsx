@@ -14,6 +14,30 @@ interface FontBookModalProps {
   initialSearchTerm?: string;
 }
 
+const getPreviewConfig = (font: FontFamily, category: string) => {
+    switch (font) {
+        case 'Libre Barcode 39 Extended': 
+            return { text: '1234', size: 'text-4xl', tracking: 'tracking-normal' };
+        case 'Noto Sans Symbols': 
+            return { text: '★ ♛ ♞', size: 'text-4xl', tracking: 'tracking-widest' };
+        case 'Noto Sans Symbols 2': 
+            return { text: '🜂 🜄 🜁', size: 'text-4xl', tracking: 'tracking-widest' };
+        case 'Noto Music': 
+            return { text: '♩ ♪ ♫', size: 'text-4xl', tracking: 'tracking-widest' };
+        case 'Noto Color Emoji': 
+        case 'Noto Emoji': 
+            return { text: '✨ 🎨', size: 'text-4xl', tracking: 'tracking-widest' };
+        case 'Linefont': 
+            return { text: 'SOUND', size: 'text-4xl', tracking: 'tracking-normal' };
+        default:
+            // Category based fallbacks
+            if (category === FONT_CATEGORIES.DOT_MATRIX || category === FONT_CATEGORIES.GAMER) {
+                 return { text: 'Px', size: 'text-4xl md:text-5xl', tracking: 'tracking-normal' };
+            }
+            return { text: 'Aa', size: 'text-4xl md:text-5xl', tracking: 'tracking-normal' };
+    }
+};
+
 const FontBookModal: React.FC<FontBookModalProps> = ({ 
   isOpen, 
   onClose, 
@@ -39,7 +63,8 @@ const FontBookModal: React.FC<FontBookModalProps> = ({
   const filteredFonts = useMemo(() => {
     return FONTS.filter(font => {
       const matchesSearch = font.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCategory = activeCategory === 'All' || getFontCategory(font) === activeCategory;
+      const category = getFontCategory(font);
+      const matchesCategory = activeCategory === 'All' || category === activeCategory;
       return matchesSearch && matchesCategory;
     });
   }, [activeCategory, searchQuery]);
@@ -125,6 +150,8 @@ const FontBookModal: React.FC<FontBookModalProps> = ({
                     const varConfig = VARIABLE_FONTS[font];
                     const extraAxes = varConfig?.axes.filter(a => a.tag !== 'wght') || [];
                     const hasVariable = !!varConfig;
+                    const category = getFontCategory(font);
+                    const preview = getPreviewConfig(font, category);
 
                     return (
                     <button
@@ -141,10 +168,10 @@ const FontBookModal: React.FC<FontBookModalProps> = ({
                         {/* Preview Area */}
                         <div className="flex-1 flex items-center justify-center p-4 w-full overflow-hidden relative">
                             <span 
-                                style={{ fontFamily: font }} 
-                                className="text-4xl md:text-5xl text-white group-hover:scale-110 transition-transform duration-300"
+                                style={{ fontFamily: `"${font}"` }} 
+                                className={`${preview.size} text-white group-hover:scale-110 transition-transform duration-300 ${preview.tracking}`}
                             >
-                                Aa
+                                {preview.text}
                             </span>
                         </div>
                         

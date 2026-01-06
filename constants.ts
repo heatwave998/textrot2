@@ -46,7 +46,7 @@ export const FONTS: FontFamily[] = [
   'Rubik Gemstones', 'Rubik Glitch', 'Rubik Glitch Pop', 'Rubik Iso', 'Rubik Lines', 'Rubik Maps', 'Rubik Marker Hatch', 'Rubik Maze', 'Rubik Microbe', 'Rubik Mono One', 
   'Rubik Moonrocks', 'Rubik Pixels', 'Rubik Puddles', 'Rubik Scribble', 'Rubik Spray Paint', 'Rubik Storm', 'Rubik Vinyl', 'Rubik Wet Paint', 
   'Rye', 'Sancreek', 'Shadows Into Light', 'Share Tech Mono', 'Shojumaru', 'Silkscreen', 'Sixtyfour', 'Slackey', 'Smokum', 'Sonsie One', 'Sora', 'Source Sans 3', 'Space Grotesk', 'Space Grotesque', 'Space Mono', 'Special Elite', 'Syne',
-  'Tilt Warp', 'Tourney', 'Turret Road', 'Unbounded', 'UnifrakturMaguntia', 'VT323', 'Vast Shadow', 'Wallpoet', 'Wavefont', 'Workbench', 'Zen Dots'
+  'Tilt Warp', 'Tourney', 'Turret Road', 'Unbounded', 'UnifrakturMaguntia', 'VT323', 'Vast Shadow', 'Wallpoet', 'Workbench', 'Zen Dots'
 ];
 
 // Variable Font Axis Definition
@@ -243,12 +243,6 @@ export const VARIABLE_FONTS: Partial<Record<FontFamily, VariableFontConfig>> = {
       { tag: 'wdth', name: 'Width', min: 50, max: 200, defaultValue: 100, step: 1 }
     ]
   },
-  'Wavefont': {
-    axes: [
-      { tag: 'wght', name: 'Weight', min: 100, max: 900, defaultValue: 400, step: 1 },
-      { tag: 'ROND', name: 'Roundness', min: 0, max: 100, defaultValue: 0, step: 1 }
-    ]
-  },
   'Noto Emoji': {
     axes: [
       { tag: 'wght', name: 'Weight', min: 300, max: 700, defaultValue: 400, step: 1 }
@@ -319,7 +313,7 @@ export const getFontCategory = (font: FontFamily): string => {
     ],
     [FONT_CATEGORIES.NOT_TEXT]: [
         'Noto Sans Symbols', 'Libre Barcode 39 Extended', 'Noto Music', 
-        'Noto Sans Symbols 2', 'Linefont', 'Wavefont', 'Noto Color Emoji', 'Noto Emoji'
+        'Noto Sans Symbols 2', 'Linefont', 'Noto Color Emoji', 'Noto Emoji'
     ],
     [FONT_CATEGORIES.ALIEN]: [
         'Audiowide', 'Turret Road', 'Zen Dots', 'Megrim', 

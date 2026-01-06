@@ -230,6 +230,5 @@ export type FontFamily =
   | 'VT323'
   | 'Vast Shadow'
   | 'Wallpoet'
-  | 'Wavefont'
   | 'Workbench'
   | 'Zen Dots';
