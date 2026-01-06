@@ -20,7 +20,8 @@ export const FONT_CATEGORIES = {
   GAMER: 'Gamer',
   RETRO_SIGNAGE: '80s / Signage',
   TECH_FUTURE: 'Tech / Future',
-  EXPERIMENTAL: 'Experimental'
+  SHADED: 'Shaded',
+  NOT_TEXT: 'Not Text / Symbols'
 };
 
 // Fonts that support COLRv1 or other built-in color palettes.
@@ -28,22 +29,24 @@ export const FONT_CATEGORIES = {
 export const COLOR_FONTS: FontFamily[] = [
   'Nabla',
   'Kalnia Glaze',
-  'Honk'
+  'Honk',
+  'Foldit',
+  'Noto Color Emoji'
 ];
 
 export const FONTS: FontFamily[] = [
-  'Abril Fatface', 'Alfa Slab One', 'Amatic SC', 'Anton', 'Audiowide', 'Bangers', 'Bebas Neue', 'Bodoni Moda', 'Bruno Ace SC', 'Bungee', 'Bungee Shade', 'Butcherman', 'Cinzel',
-  'Cormorant Garamond', 'Creepster', 'Crimson Text', 'Diplomata', 'DM Serif Display', 'Dancing Script', 'DotGothic16', 'Doto', 'Eater', 'Eduardo Tunni', 'Ewert', 'Exo 2', 'Fascinate Inline', 'Finger Paint', 'Fira Code',
-  'Foldit', 'Fraunces', 'Frijole', 'Geostar', 'Gloria Hallelujah', 'Gluten', 'Great Vibes', 'Grenze Gotisch', 'Handjet', 'Honk', 'Inter', 'Italiana', 'Jacquard 12', 'Jersey 10', 'Josefin Sans', 'Kablammo', 'Kalnia Glaze', 'Krona One', 'Lato', 'League Gothic', 'Libre Baskerville',
-  'Lobster', 'Lora', 'Major Mono Display', 'Megrim', 'Merriweather', 'Metal Mania', 'Michroma', 'Micro 5', 'Monoton', 'Montserrat', 'Nabla', 'Nosifer', 'Noto Sans', 'Oi', 'Open Sans', 'Orbitron', 'Oswald', 'Oxanium',
-  'PT Sans', 'PT Serif', 'Pacifico', 'Permanent Marker', 'Piedra', 'Pixelify Sans', 'Plaster', 'Playfair Display', 'Poiret One', 'Poppins', 'Press Start 2P', 'Quantico', 'Raleway', 'Righteous',
-  'Roboto', 'Rock Salt', 
+  'Abril Fatface', 'Akronim', 'Alfa Slab One', 'Amatic SC', 'Anton', 'Audiowide', 'Bangers', 'Bebas Neue', 'Bodoni Moda', 'Bruno Ace SC', 'Bungee', 'Bungee Shade', 'Butcherman', 'Cinzel',
+  'Cormorant Garamond', 'Creepster', 'Crimson Text', 'Diplomata', 'DM Serif Display', 'Dancing Script', 'DotGothic16', 'Doto', 'Eater', 'Eduardo Tunni', 'Ewert', 'Exo 2', 'Fascinate Inline', 'Faster One', 'Finger Paint', 'Fira Code',
+  'Foldit', 'Fraunces', 'Frijole', 'Geostar', 'Gloria Hallelujah', 'Gluten', 'Great Vibes', 'Grenze Gotisch', 'Handjet', 'Honk', 'Inter', 'Italiana', 'Jacquard 12', 'Jacques Francois Shadow', 'Jersey 10', 'Josefin Sans', 'Kablammo', 'Kalnia Glaze', 'Krona One', 'Lato', 'League Gothic', 'Libre Barcode 39 Extended', 'Libre Baskerville',
+  'Linefont', 'Lobster', 'Londrina Shadow', 'Lora', 'Major Mono Display', 'Megrim', 'Merriweather', 'Metal Mania', 'Michroma', 'Micro 5', 'Monoton', 'Montserrat', 'Nabla', 'Nosifer', 'Noto Color Emoji', 'Noto Emoji', 'Noto Music', 'Noto Sans', 'Noto Sans Symbols', 'Noto Sans Symbols 2', 'Oi', 'Open Sans', 'Orbitron', 'Oswald', 'Oxanium',
+  'PT Sans', 'PT Serif', 'Pacifico', 'Permanent Marker', 'Piedra', 'Pixelify Sans', 'Plaster', 'Playfair Display', 'Poiret One', 'Poppins', 'Press Start 2P', 'Quantico', 'Raleway', 'Rampart One', 'Ribeye Marrow', 'Righteous',
+  'Roboto', 'Rock 3D', 'Rock Salt', 
   // Rubik Collection
   'Rubik', 'Rubik 80s Fade', 'Rubik Beastly', 'Rubik Broken Fax', 'Rubik Bubbles', 'Rubik Burned', 'Rubik Dirt', 'Rubik Distressed', 'Rubik Doodle Shadow', 'Rubik Doodle Triangles', 
   'Rubik Gemstones', 'Rubik Glitch', 'Rubik Glitch Pop', 'Rubik Iso', 'Rubik Lines', 'Rubik Maps', 'Rubik Marker Hatch', 'Rubik Maze', 'Rubik Microbe', 'Rubik Mono One', 
   'Rubik Moonrocks', 'Rubik Pixels', 'Rubik Puddles', 'Rubik Scribble', 'Rubik Spray Paint', 'Rubik Storm', 'Rubik Vinyl', 'Rubik Wet Paint', 
-  'Rye', 'Sancreek', 'Shadows Into Light', 'Share Tech Mono', 'Shojumaru', 'Silkscreen', 'Sixtyfour', 'Slackey', 'Smokum', 'Sora', 'Source Sans 3', 'Space Grotesk', 'Space Grotesque', 'Space Mono', 'Special Elite', 'Syne',
-  'Tilt Warp', 'Turret Road', 'Unbounded', 'UnifrakturMaguntia', 'VT323', 'Vast Shadow', 'Wallpoet', 'Workbench', 'Zen Dots'
+  'Rye', 'Sancreek', 'Shadows Into Light', 'Share Tech Mono', 'Shojumaru', 'Silkscreen', 'Sixtyfour', 'Slackey', 'Smokum', 'Sonsie One', 'Sora', 'Source Sans 3', 'Space Grotesk', 'Space Grotesque', 'Space Mono', 'Special Elite', 'Syne',
+  'Tilt Warp', 'Tourney', 'Turret Road', 'Unbounded', 'UnifrakturMaguntia', 'VT323', 'Vast Shadow', 'Wallpoet', 'Wavefont', 'Workbench', 'Zen Dots'
 ];
 
 // Variable Font Axis Definition
@@ -84,6 +87,11 @@ export const VARIABLE_FONTS: Partial<Record<FontFamily, VariableFontConfig>> = {
       { tag: 'SOFT', name: 'Softness', min: 0, max: 100, defaultValue: 0, step: 1 },
       // Change WONK to a toggle with step 1 (0 or 1)
       { tag: 'WONK', name: 'Wonkiness', min: 0, max: 1, defaultValue: 0, step: 1, inputType: 'toggle' }
+    ]
+  },
+  'Foldit': {
+    axes: [
+      { tag: 'wght', name: 'Weight', min: 100, max: 900, defaultValue: 400, step: 1 }
     ]
   },
   'Gluten': {
@@ -189,6 +197,12 @@ export const VARIABLE_FONTS: Partial<Record<FontFamily, VariableFontConfig>> = {
       { tag: 'wght', name: 'Weight', min: 300, max: 700, defaultValue: 400, step: 1 }
     ]
   },
+  'Tourney': {
+    axes: [
+      { tag: 'wght', name: 'Weight', min: 100, max: 900, defaultValue: 400, step: 1 },
+      { tag: 'wdth', name: 'Width', min: 50, max: 125, defaultValue: 100, step: 0.1 }
+    ]
+  },
   'Unbounded': {
      axes: [
        { tag: 'wght', name: 'Weight', min: 200, max: 900, defaultValue: 400, step: 1 }
@@ -222,14 +236,36 @@ export const VARIABLE_FONTS: Partial<Record<FontFamily, VariableFontConfig>> = {
       { tag: 'XROT', name: 'X Rotation', min: -45, max: 45, defaultValue: 0, step: 1 },
       { tag: 'YROT', name: 'Y Rotation', min: -45, max: 45, defaultValue: 0, step: 1 }
     ]
+  },
+  'Linefont': {
+    axes: [
+      { tag: 'wght', name: 'Weight', min: 100, max: 900, defaultValue: 400, step: 1 },
+      { tag: 'wdth', name: 'Width', min: 50, max: 200, defaultValue: 100, step: 1 }
+    ]
+  },
+  'Wavefont': {
+    axes: [
+      { tag: 'wght', name: 'Weight', min: 100, max: 900, defaultValue: 400, step: 1 },
+      { tag: 'ROND', name: 'Roundness', min: 0, max: 100, defaultValue: 0, step: 1 }
+    ]
+  },
+  'Noto Emoji': {
+    axes: [
+      { tag: 'wght', name: 'Weight', min: 300, max: 700, defaultValue: 400, step: 1 }
+    ]
+  },
+  'Noto Sans Symbols': {
+    axes: [
+      { tag: 'wght', name: 'Weight', min: 100, max: 900, defaultValue: 400, step: 1 }
+    ]
   }
 };
 
 
 // Helper to map fonts to categories
 export const getFontCategory = (font: FontFamily): string => {
-  // Check Color Fonts first
-  if (COLOR_FONTS.includes(font)) {
+  // Check Color Fonts first, EXCEPT for Noto Color Emoji which we want in Not Text
+  if (COLOR_FONTS.includes(font) && font !== 'Noto Color Emoji') {
       return FONT_CATEGORIES.COLOR;
   }
 
@@ -276,8 +312,14 @@ export const getFontCategory = (font: FontFamily): string => {
     [FONT_CATEGORIES.TECH_FUTURE]: [
         'Space Grotesk'
     ],
-    [FONT_CATEGORIES.EXPERIMENTAL]: [
-        'Syne', 'Rubik Dirt', 'Rubik Distressed', 'Rubik Maps', 'Rubik Moonrocks', 'Rubik Scribble', 'Rubik Spray Paint', 'Rubik Storm'
+    [FONT_CATEGORIES.SHADED]: [
+        'Bungee Shade', 'Vast Shadow', 'Rubik Doodle Shadow', 'Faster One', 
+        'Jacques Francois Shadow', 'Londrina Shadow', 'Ribeye Marrow', 'Sonsie One', 
+        'Tourney', 'Monoton', 'Fascinate Inline', 'Akronim', 'Rampart One', 'Rock 3D', 'Ewert'
+    ],
+    [FONT_CATEGORIES.NOT_TEXT]: [
+        'Noto Sans Symbols', 'Libre Barcode 39 Extended', 'Noto Music', 
+        'Noto Sans Symbols 2', 'Linefont', 'Wavefont', 'Noto Color Emoji', 'Noto Emoji'
     ],
     [FONT_CATEGORIES.ALIEN]: [
         'Audiowide', 'Turret Road', 'Zen Dots', 'Megrim', 
@@ -288,12 +330,12 @@ export const getFontCategory = (font: FontFamily): string => {
         'Krona One', 'Jacquard 12', 'Jersey 10', 'Micro 5'
     ],
     [FONT_CATEGORIES.DISPLAY]: [
-        'Alfa Slab One', 'Bangers', 'Bungee Shade', 'Fascinate Inline', 'Monoton', 
-        'Plaster', 'Poiret One', 'Righteous', 'Shojumaru', 'Special Elite', 
-        'UnifrakturMaguntia', 'Rye', 'Foldit', 'Kablammo', 'Rubik Iso', 'Rubik 80s Fade',
-        'Rubik Burned', 'Rubik Marker Hatch', 'Rubik Puddles', 'Rubik Mono One', 'Rubik Vinyl', 'Rubik Gemstones', 'Rubik Bubbles', 'Rubik Doodle Shadow', 'Rubik Doodle Triangles',
+        'Alfa Slab One', 'Bangers', 'Plaster', 'Poiret One', 'Righteous', 'Shojumaru', 'Special Elite', 
+        'UnifrakturMaguntia', 'Rye', 'Kablammo', 'Rubik Iso', 'Rubik 80s Fade',
+        'Rubik Burned', 'Rubik Marker Hatch', 'Rubik Puddles', 'Rubik Mono One', 'Rubik Vinyl', 'Rubik Gemstones', 'Rubik Bubbles', 'Rubik Doodle Triangles',
         'Diplomata', 'Geostar', 
-        'Ewert', 'Grenze Gotisch', 'Vast Shadow', 'Workbench', 'Slackey', 'Smokum', 'Oi'
+        'Grenze Gotisch', 'Workbench', 'Slackey', 'Smokum', 'Oi',
+        'Syne', 'Rubik Dirt', 'Rubik Distressed', 'Rubik Maps', 'Rubik Moonrocks', 'Rubik Scribble', 'Rubik Spray Paint', 'Rubik Storm'
     ],
     [FONT_CATEGORIES.FANCY]: [
         'Fraunces', 'Tilt Warp'
