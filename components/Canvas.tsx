@@ -861,6 +861,13 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
       // 1. Render Background
       const bgImg = overrideBgImage || bgImageRef.current;
       if (shouldClear) bufferCtx.clearRect(0, 0, width, height);
+      
+      // NEW: Draw Solid Background Color if type is solid
+      if (design.backgroundType === 'solid') {
+          bufferCtx.fillStyle = design.backgroundColor;
+          bufferCtx.fillRect(0, 0, width, height);
+      }
+
       if (bgImg) {
           bufferCtx.drawImage(bgImg, 0, 0, width, height);
       }
@@ -966,7 +973,7 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
       }
       targetCtx.drawImage(buffer, 0, 0);
 
-  }, [design.layers, interactionMode, design.activeLayerId]);
+  }, [design.layers, interactionMode, design.activeLayerId, design.backgroundColor, design.backgroundType]);
 
   // Live Preview Renderer
   useEffect(() => {
@@ -1656,7 +1663,10 @@ const Canvas = forwardRef<CanvasHandle, CanvasProps>(({ imageSrc, design, enable
       >
         {imageSrc ? (
           <>
-            <div className="relative w-full h-full overflow-hidden rounded-[3px] shadow-2xl bg-neutral-900 flex items-center justify-center">
+            <div 
+                className="relative w-full h-full overflow-hidden rounded-[3px] shadow-2xl bg-neutral-900 flex items-center justify-center"
+                style={{ backgroundColor: design.backgroundType === 'solid' ? design.backgroundColor : undefined }}
+            >
                 <img 
                   key={imageSrc} 
                   src={imageSrc} 

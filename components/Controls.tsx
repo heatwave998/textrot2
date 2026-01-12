@@ -1,5 +1,3 @@
-
-
 import React, { useState, useCallback, useMemo, forwardRef, useImperativeHandle, useRef, useEffect } from 'react';
 import { DesignState, FontFamily, AspectRatio, TextLayer, AppSettings, GenModel, ImageResolution } from '../types';
 import { 
@@ -10,7 +8,8 @@ import {
   AlignLeft, AlignCenter, AlignRight, Move, Activity,
   Maximize, MoveHorizontal, MoveVertical, Undo2, Redo2, ToggleRight, ToggleLeft, Paintbrush,
   Plus, Eye, EyeOff, ChevronUp, ChevronDown, Wand2, BoxSelect, BookType, Link as LinkIcon, Stamp,
-  Sliders, ToggleLeft as ToggleOff, ToggleRight as ToggleOn, Globe, Copy
+  Sliders, ToggleLeft as ToggleOff, ToggleRight as ToggleOn, Globe, Copy,
+  Image as ImageIcon
 } from 'lucide-react';
 import SliderControl from './SliderControl';
 import EffectsControls from './EffectsControls';
@@ -763,7 +762,8 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
                     </button>
                 </div>
                 
-                <div className="bg-neutral-950 border border-neutral-800 rounded-[3px] overflow-hidden max-h-48 overflow-y-auto">
+                <div className="bg-neutral-950 border border-neutral-800 rounded-[3px] overflow-hidden max-h-60 overflow-y-auto">
+                    {/* Text Layers */}
                     {design.layers.slice().reverse().map((layer) => {
                         const originalIndex = design.layers.findIndex(l => l.id === layer.id);
                         const isTop = originalIndex === design.layers.length - 1;
@@ -780,14 +780,15 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
                                 e.stopPropagation();
                                 focusTextInputInternal();
                             }}
-                            className={`flex items-center justify-between p-2 text-xs border-b border-neutral-800 last:border-0 cursor-pointer group ${
+                            className={`flex items-center justify-between p-2 text-xs border-b border-neutral-800 cursor-pointer group ${
                                 isSelected 
                                 ? (isActive ? 'bg-neutral-800 text-white' : 'bg-neutral-800/50 text-neutral-300') 
                                 : 'text-neutral-400 hover:bg-neutral-900'
                             }`}
                         >
                             <div className="flex items-center gap-2 overflow-hidden flex-1">
-                                 <span className={`font-mono select-none ${isActive ? 'text-pink-500' : 'opacity-50'}`}>T</span>
+                                 {/* Improved Text Icon Aesthetic */}
+                                 <div className={`w-6 h-6 rounded-[3px] flex items-center justify-center shrink-0 font-mono text-xs font-bold border select-none ${isActive ? 'bg-pink-500 text-white border-pink-500' : 'bg-neutral-800 text-neutral-500 border-neutral-700'}`}>T</div>
                                  <span className="truncate max-w-[100px]">{layer.textOverlay || 'Empty Text'}</span>
                                  {hasPath && (
                                      <Tooltip content="Path Text Enabled">
@@ -828,8 +829,40 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
                         </div>
                     )})}
                     {design.layers.length === 0 && (
-                        <div className="p-4 text-center text-neutral-600 text-[10px] italic">No text layers. Click + to add.</div>
+                        <div className="p-4 text-center text-neutral-600 text-[10px] italic border-b border-neutral-800">No text layers. Click + to add.</div>
                     )}
+
+                    {/* Base Layer Row (Image / Background) */}
+                    <div className="p-2 text-xs flex items-center justify-between bg-neutral-950 text-neutral-400 select-none">
+                        <div className="flex items-center gap-2 overflow-hidden flex-1">
+                            <div className="w-6 h-6 rounded-[3px] flex items-center justify-center shrink-0 bg-neutral-800 border border-neutral-700 text-neutral-500">
+                                {design.backgroundType === 'image' ? (
+                                    <ImageIcon size={14} className={design.backgroundType === 'image' ? "text-blue-400" : ""} />
+                                ) : (
+                                    <div className="w-3 h-3 rounded-[1px]" style={{ backgroundColor: design.backgroundColor }} />
+                                )}
+                            </div>
+                            <span>Background</span>
+                        </div>
+                        {design.backgroundType === 'solid' && (
+                            <div className="flex items-center justify-end w-[88px]">
+                                <div className="relative group/picker">
+                                    <input 
+                                        type="color" 
+                                        value={design.backgroundColor}
+                                        onChange={(e) => updateGlobal('backgroundColor', e.target.value)}
+                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                    />
+                                    <div className="w-8 h-6 rounded-[3px] border border-neutral-700 hover:border-neutral-500 bg-neutral-800 flex items-center justify-center transition-colors">
+                                        <div 
+                                            className="w-4 h-4 rounded-[2px] shadow-sm" 
+                                            style={{ backgroundColor: design.backgroundColor }} 
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 {/* Stamp Buttons */}
@@ -1008,7 +1041,7 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
                         value={activeLayer.textColor} 
                         onChange={(e) => updateLayer('textColor', e.target.value)} 
                         disabled={isColorFont}
-                        className="w-6 h-6 rounded-[3px] cursor-pointer bg-transparent border-none disabled:cursor-not-allowed" 
+                        className="w-12 h-full rounded-[2px] cursor-pointer bg-transparent border-none disabled:cursor-not-allowed" 
                       />
                       <span className="text-xs font-mono text-neutral-400">{isColorFont ? 'Native' : activeLayer.textColor}</span>
                   </div>
@@ -1027,7 +1060,7 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
                       </button>
                   </div>
                   <div className={`flex items-center gap-2 bg-neutral-950 border border-neutral-800 rounded-[3px] p-1 h-10 transition-opacity ${(!activeLayer.hasShadow || isShadowDisabled) ? 'opacity-50 pointer-events-none' : ''}`}>
-                      <input type="color" value={activeLayer.shadowColor} onChange={(e) => updateLayer('shadowColor', e.target.value)} className="w-6 h-6 rounded-[3px] cursor-pointer bg-transparent border-none" />
+                      <input type="color" value={activeLayer.shadowColor} onChange={(e) => updateLayer('shadowColor', e.target.value)} className="w-12 h-full rounded-[2px] cursor-pointer bg-transparent border-none" />
                       <span className="text-xs font-mono text-neutral-400">{activeLayer.shadowColor}</span>
                   </div>
                   {isShadowDisabled && <div className="text-[9px] text-neutral-600 mt-1 italic">Handled by Font Axis</div>}

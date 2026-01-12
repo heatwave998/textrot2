@@ -1,5 +1,3 @@
-
-
 import React from 'react';
 import { DesignState, TextLayer } from '../types';
 import { CircleDashed, Square, Ban, Compass, Lightbulb } from 'lucide-react';
@@ -228,7 +226,7 @@ const EffectsControls: React.FC<EffectsControlsProps> = ({ design, update, toggl
                                 type="color" 
                                 value={activeLayer.effectColor}
                                 onChange={(e) => update('effectColor', e.target.value)}
-                                className="w-6 h-6 rounded-[3px] cursor-pointer bg-transparent border-none"
+                                className="w-12 h-full rounded-[2px] cursor-pointer bg-transparent border-none"
                             />
                             <span className="text-xs font-mono text-neutral-400">{activeLayer.effectColor}</span>
                         </div>
@@ -240,7 +238,7 @@ const EffectsControls: React.FC<EffectsControlsProps> = ({ design, update, toggl
                                     type="color" 
                                     value={activeLayer.effectColor2}
                                     onChange={(e) => update('effectColor2', e.target.value)}
-                                    className="w-6 h-6 rounded-[3px] cursor-pointer bg-transparent border-none"
+                                    className="w-12 h-full rounded-[2px] cursor-pointer bg-transparent border-none"
                                 />
                                 <span className="text-xs font-mono text-neutral-400">{activeLayer.effectColor2}</span>
                             </div>
@@ -279,7 +277,7 @@ const EffectsControls: React.FC<EffectsControlsProps> = ({ design, update, toggl
                             type="color" 
                             value={activeLayer.outlineColor}
                             onChange={(e) => update('outlineColor', e.target.value)}
-                            className="w-6 h-6 rounded-[3px] cursor-pointer bg-transparent border-none"
+                            className="w-12 h-full rounded-[2px] cursor-pointer bg-transparent border-none"
                             title="Outline color"
                         />
                         <span className="text-xs font-mono text-neutral-400">{activeLayer.outlineColor}</span>

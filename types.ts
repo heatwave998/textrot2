@@ -1,3 +1,4 @@
+
 export type AspectRatio = '1:1' | '4:3' | '3:2' | '16:9';
 
 export type Orientation = 'landscape' | 'portrait';
@@ -66,6 +67,8 @@ export interface DesignState {
   layers: TextLayer[];
   activeLayerId: string | null;
   selectedLayerIds: string[];
+  backgroundType: 'image' | 'solid';
+  backgroundColor: string;
 }
 
 export interface AppSettings {

@@ -1,5 +1,3 @@
-
-
 import React, { useState, useRef, useEffect } from 'react';
 import Canvas, { CanvasHandle } from './components/Canvas';
 import Controls, { ControlsHandle } from './components/Controls';
@@ -79,7 +77,9 @@ const DEFAULT_DESIGN: DesignState = {
   orientation: 'landscape',
   layers: [createLayer(INITIAL_LAYER_ID)],
   activeLayerId: INITIAL_LAYER_ID,
-  selectedLayerIds: [INITIAL_LAYER_ID]
+  selectedLayerIds: [INITIAL_LAYER_ID],
+  backgroundType: 'image', // Default to image mode until Blank is clicked
+  backgroundColor: '#ffffff'
 };
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -98,6 +98,8 @@ interface ImageHistoryItem {
   aspectRatio: AspectRatio;
   orientation: Orientation;
   layers: TextLayer[];
+  backgroundType: 'image' | 'solid';
+  backgroundColor: string;
   groundingMetadata?: any;
 }
 
@@ -201,8 +203,16 @@ export default function App() {
   };
 
   // --- History Management ---
-  const addToHistory = (newImageSrc: string, ratio: AspectRatio, orientation: Orientation, layers: TextLayer[], metadata?: any) => {
-    const newItem: ImageHistoryItem = { src: newImageSrc, aspectRatio: ratio, orientation, layers, groundingMetadata: metadata };
+  const addToHistory = (newImageSrc: string, ratio: AspectRatio, orientation: Orientation, layers: TextLayer[], bgType: 'image' | 'solid', bgColor: string, metadata?: any) => {
+    const newItem: ImageHistoryItem = { 
+        src: newImageSrc, 
+        aspectRatio: ratio, 
+        orientation, 
+        layers, 
+        backgroundType: bgType,
+        backgroundColor: bgColor,
+        groundingMetadata: metadata 
+    };
     
     const currentHistory = imageHistory.slice(0, historyIndex + 1);
     const newHistory = [...currentHistory, newItem];
@@ -246,7 +256,9 @@ export default function App() {
                 orientation: previousState.orientation,
                 layers: restoredLayers,
                 activeLayerId: activeId,
-                selectedLayerIds: activeId ? [activeId] : []
+                selectedLayerIds: activeId ? [activeId] : [],
+                backgroundType: previousState.backgroundType,
+                backgroundColor: previousState.backgroundColor
             };
         });
     }
@@ -280,7 +292,9 @@ export default function App() {
                 orientation: nextState.orientation,
                 layers: restoredLayers,
                 activeLayerId: activeId,
-                selectedLayerIds: activeId ? [activeId] : []
+                selectedLayerIds: activeId ? [activeId] : [],
+                backgroundType: nextState.backgroundType,
+                backgroundColor: nextState.backgroundColor
             };
         });
       }
@@ -336,11 +350,13 @@ export default function App() {
         isPathMoveMode: false,
       }));
 
-      addToHistory(imageData, design.aspectRatio, design.orientation, newLayers, groundingMetadata);
+      // Generate sets type to 'image'
+      addToHistory(imageData, design.aspectRatio, design.orientation, newLayers, 'image', design.backgroundColor, groundingMetadata);
       
       setDesign(prev => ({
         ...prev,
-        layers: newLayers
+        layers: newLayers,
+        backgroundType: 'image'
       }));
       
       // Reset view for fresh generation
@@ -403,10 +419,13 @@ export default function App() {
           const { imageData, groundingMetadata } = result;
 
           log("Response received. Updating canvas...");
-          addToHistory(imageData, design.aspectRatio, design.orientation, design.layers, groundingMetadata);
+          // Edit maintains 'image' type
+          addToHistory(imageData, design.aspectRatio, design.orientation, design.layers, 'image', design.backgroundColor, groundingMetadata);
           // Do NOT reset view for Edit (Inpainting)
           log("Edit complete.");
           
+          setDesign(prev => ({ ...prev, backgroundType: 'image' }));
+
           setIsGenerating(false);
           // Use Ref to check LATEST debug state
           if (!showLoadingDebugRef.current) {
@@ -457,13 +476,17 @@ export default function App() {
     const newId = crypto.randomUUID();
     const newLayers = [createLayer(newId, 'BLANK CANVAS')];
     
-    addToHistory(blankImgData, design.aspectRatio, design.orientation, newLayers, null);
+    // Blank Canvas sets type to 'solid' and defaults to dark gray/black
+    const newBgColor = '#181818';
+    addToHistory(blankImgData, design.aspectRatio, design.orientation, newLayers, 'solid', newBgColor, null);
     
     setDesign(prev => ({
         ...prev,
         layers: newLayers,
         activeLayerId: newId,
-        selectedLayerIds: [newId]
+        selectedLayerIds: [newId],
+        backgroundType: 'solid',
+        backgroundColor: newBgColor
     }));
     
     // Reset view for new blank canvas
@@ -524,13 +547,15 @@ export default function App() {
 
             const cleanLayers = design.layers.map(l => ({ ...l, pathPoints: [], isPathInputMode: false, isPathMoveMode: false }));
             
-            addToHistory(result, closestRatio, newOrientation, cleanLayers, null);
+            // Upload sets type to 'image'
+            addToHistory(result, closestRatio, newOrientation, cleanLayers, 'image', design.backgroundColor, null);
             
             setDesign(prev => ({
                 ...prev,
                 aspectRatio: closestRatio,
                 orientation: newOrientation,
-                layers: cleanLayers
+                layers: cleanLayers,
+                backgroundType: 'image'
             }));
             
             // Reset view for new upload
@@ -602,7 +627,12 @@ export default function App() {
                   const currentTip = historyUpToNow[historyUpToNow.length - 1];
                   historyUpToNow[historyUpToNow.length - 1] = {
                       ...currentTip,
-                      layers: layersSnapshot
+                      layers: layersSnapshot,
+                      // Track background state in the history tip to ensure Undo restores color correctly
+                      backgroundColor: design.backgroundColor,
+                      backgroundType: design.backgroundType,
+                      aspectRatio: design.aspectRatio,
+                      orientation: design.orientation
                   };
               }
 
@@ -611,6 +641,8 @@ export default function App() {
                   aspectRatio: design.aspectRatio,
                   orientation: design.orientation,
                   layers: remainingLayers,
+                  backgroundType: 'image', // Stamping effectively creates a new flat image
+                  backgroundColor: design.backgroundColor,
                   groundingMetadata // Preserve metadata through stamping
               };
               
@@ -634,7 +666,8 @@ export default function App() {
                   ...prev,
                   layers: remainingLayers,
                   activeLayerId: newActiveId,
-                  selectedLayerIds: newActiveId ? [newActiveId] : []
+                  selectedLayerIds: newActiveId ? [newActiveId] : [],
+                  backgroundType: 'image' // Stamping flattens to image
               };
           });
 
