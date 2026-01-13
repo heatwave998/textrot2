@@ -82,6 +82,16 @@ export interface AppSettings {
   showFontDebug: boolean;
 }
 
+export interface ImageHistoryItem {
+  src: string;
+  aspectRatio: AspectRatio;
+  orientation: Orientation;
+  layers: TextLayer[];
+  backgroundType: 'image' | 'solid';
+  backgroundColor: string;
+  groundingMetadata?: any;
+}
+
 export type FontFamily = 
   | 'Abril Fatface' 
   | 'Akronim'

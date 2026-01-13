@@ -7,101 +7,11 @@ import ErrorModal from './components/ErrorModal';
 import UrlImportModal from './components/UrlImportModal';
 import LoadingOverlay from './components/LoadingOverlay';
 import KeyboardShortcutsModal from './components/KeyboardShortcutsModal';
-import { DesignState, AppSettings, AspectRatio, Orientation, Point, TextLayer } from './types';
+import { DesignState, AppSettings, AspectRatio, Orientation, Point, TextLayer, ImageHistoryItem } from './types';
 import { generateBackgroundImage, editImage } from './services/geminiService';
 import { useKeyboard, KeyboardShortcut } from './hooks/useKeyboard';
-
-// Helper to create a new layer
-const createLayer = (id: string, text: string = 'EDIT ME'): TextLayer => ({
-  id,
-  name: 'Text Layer',
-  visible: true,
-  locked: false,
-  textOverlay: text,
-  fontFamily: 'Inter',
-  textColor: '#FFFFFF',
-  shadowColor: '#000000',
-  textSize: 5,
-  letterSpacing: 0,
-  letterRotation: 0,
-  textAlign: 'center',
-  overlayPosition: { x: 50, y: 50 },
-  blendMode: 'normal',
-  opacity: 1,
-  
-  // Font Variations (Variable Fonts)
-  fontVariations: {},
-
-  pathPoints: [],
-  pathSmoothing: 5,
-  isPathInputMode: false,
-  isPathMoveMode: false,
-
-  shadowBlur: 20,
-  hasShadow: true,
-  shadowOffset: 20,
-  shadowAngle: 45,
-  shadowOpacity: 1.0,
-  shadowGrow: 0,
-  
-  isBold: false,
-  isItalic: false,
-  isUppercase: false,
-  
-  isHollow: false,
-  hasOutline: false,
-  outlineWidth: 2,
-  outlineColor: '#000000',
-  
-  specialEffect: 'none',
-  effectIntensity: 50,
-  effectColor: '#FF0000',
-  effectColor2: '#00FFFF',
-  isRainbowGlitch: false,
-  isRainbowLights: false, // Default to normal blending
-  rainbowOpacity: 1.0,
-  rainbowBlur: 0,
-  effectAngle: 90,
-  
-  rotation: 360,
-  flipX: false,
-  flipY: false
-});
-
-const INITIAL_LAYER_ID = 'layer-1';
-
-// Initial State
-const DEFAULT_DESIGN: DesignState = {
-  prompt: '',
-  aspectRatio: '1:1',
-  orientation: 'landscape',
-  layers: [createLayer(INITIAL_LAYER_ID)],
-  activeLayerId: INITIAL_LAYER_ID,
-  selectedLayerIds: [INITIAL_LAYER_ID],
-  backgroundType: 'image', // Default to image mode until Blank is clicked
-  backgroundColor: '#ffffff'
-};
-
-const DEFAULT_SETTINGS: AppSettings = {
-  enableZoom: true,
-  googleApiKey: '',
-  imageModel: 'gemini-3-pro-image-preview',
-  imageResolution: '1K',
-  quality: 'Photorealistic, 8k, highly detailed',
-  generationSystemPrompt: 'Cinematic lighting, negative space for text overlay, polished design aesthetic.',
-  editingSystemPrompt: 'Maintain photorealism.',
-  showFontDebug: false
-};
-
-interface ImageHistoryItem {
-  src: string;
-  aspectRatio: AspectRatio;
-  orientation: Orientation;
-  layers: TextLayer[];
-  backgroundType: 'image' | 'solid';
-  backgroundColor: string;
-  groundingMetadata?: any;
-}
+import { createLayer, DEFAULT_DESIGN, DEFAULT_SETTINGS, INITIAL_LAYER_ID } from './utils/defaults';
+import { getFriendlyError } from './utils/errorHandler';
 
 export default function App() {
   const [design, setDesign] = useState<DesignState>(DEFAULT_DESIGN);
@@ -168,37 +78,7 @@ export default function App() {
     }
 
     console.error("Application Error:", error);
-    
-    let title = 'An Unexpected Error Occurred';
-    let message = 'Something went wrong. Please try again later.';
-    const errorMsg = error?.message || JSON.stringify(error) || '';
-
-    if (errorMsg.includes('429') || errorMsg.includes('quota') || errorMsg.includes('RESOURCE_EXHAUSTED')) {
-        title = 'Quota Limit Reached';
-        message = 'You have exceeded the request limit for the API. Please wait a moment before trying again, or add your own API Key in Settings for higher limits.';
-    } else if (errorMsg.includes('API_KEY') || errorMsg.includes('403') || errorMsg.includes('PERMISSION_DENIED')) {
-        title = 'Authorization Error';
-        message = 'The API Key provided is invalid or missing permissions. Please check your API Key in Settings.';
-    } else if (errorMsg.includes('503') || errorMsg.includes('Overloaded')) {
-        title = 'Service Overloaded';
-        message = 'The AI models are currently experiencing high traffic. Please try again in a few seconds.';
-    } else if (errorMsg.includes('500') || errorMsg.includes('Internal') || errorMsg.includes('Server Error')) {
-        title = 'Server Error (500)';
-        message = 'The Gemini service encountered an internal error. This is usually temporary. Please try again.';
-    } else if (errorMsg.includes('IMAGE_RECITATION')) {
-        title = 'Recitation Check Failed';
-        message = 'The AI generated content that too closely resembles existing copyrighted works or the source image. Please try modifying your prompt or using a different input image.';
-    } else if (errorMsg.includes('Safety') || errorMsg.includes('blocked') || errorMsg.includes('finish reason')) {
-        title = 'Content Blocked';
-        message = 'The request was blocked by safety filters. Please modify your prompt and try again. ' + (errorMsg ? `\nDetails: ${errorMsg}` : '');
-    } else if (errorMsg.includes('Network') || errorMsg.includes('fetch')) {
-        title = 'Network Error';
-        message = 'Could not connect to the AI service. Please check your internet connection.';
-    } else if (errorMsg.includes('Model returned text')) {
-        title = 'Generation Failed';
-        message = errorMsg;
-    }
-
+    const { title, message } = getFriendlyError(error);
     setErrorState({ isOpen: true, title, message });
   };
 
@@ -226,6 +106,13 @@ export default function App() {
     
     setImageSrc(newImageSrc);
     setGroundingMetadata(metadata);
+  };
+
+  // Exposed method to snapshot current design state for granular Undo/Redo (e.g., Font changes)
+  const handleSnapshot = (designOverride?: DesignState) => {
+      const d = designOverride || design;
+      // We rely on current imageSrc for background
+      addToHistory(imageSrc || '', d.aspectRatio, d.orientation, d.layers, d.backgroundType, d.backgroundColor, groundingMetadata);
   };
 
   const handleUndo = () => {
@@ -777,6 +664,7 @@ export default function App() {
           onUndo={handleUndo}
           onRedo={handleRedo}
           onStamp={handleStamp}
+          onRegisterHistory={handleSnapshot}
           canUndo={historyIndex > 0}
           canRedo={historyIndex < imageHistory.length - 1}
           isGenerating={isGenerating}

@@ -35,6 +35,7 @@ interface ControlsProps {
   onUndo: () => void;
   onRedo: () => void;
   onStamp: (ids: string[]) => void;
+  onRegisterHistory: (designOverride?: DesignState) => void;
   canUndo: boolean;
   canRedo: boolean;
   isGenerating: boolean;
@@ -71,6 +72,7 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
   onUndo,
   onRedo,
   onStamp,
+  onRegisterHistory,
   canUndo,
   canRedo,
   isGenerating,
