@@ -88,7 +88,7 @@ const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({ isOpen,
 
             {/* Layer Controls */}
             <div>
-                <h4 className="text-xs font-bold text-pink-500 uppercase tracking-wider mb-3">Layer Nudging</h4>
+                <h4 className="text-xs font-bold text-pink-500 uppercase tracking-wider mb-3">Text Layer Nudging</h4>
                 <ShortcutRow 
                   keys={[
                     <ArrowUp size={12}/>, 

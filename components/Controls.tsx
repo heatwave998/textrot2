@@ -190,7 +190,7 @@ const Controls = forwardRef<ControlsHandle, ControlsProps>(({
   
   useKeyboard(panelShortcuts);
 
-  // --- Layer Nudging Logic ---
+  // --- Text Layer Nudging Logic ---
   const nudgeLayer = useCallback((axis: 'x' | 'y', delta: number) => {
       setDesign(prev => {
           if (prev.selectedLayerIds.length === 0) return prev;
