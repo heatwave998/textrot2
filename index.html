@@ -262,14 +262,21 @@
                         container.appendChild(row);
                     });
 
+                    // Initial Check
                     checkFonts(families);
                     
+                    // Poll for initial load (standard lazy load)
                     let checks = 0;
                     const interval = setInterval(() => {
                         checkFonts(families);
                         checks++;
                         if (checks > 10) clearInterval(interval);
                     }, 1000);
+
+                    // Add Listener for LIVE updates
+                    document.fonts.addEventListener('loadingdone', () => {
+                         checkFonts(families);
+                    });
 
                     recheckBtn.onclick = () => checkFonts(families);
                 } catch (e) {
@@ -278,14 +285,32 @@
                 }
             }
 
+            // Enhanced Check Function
             async function checkFonts(families) {
                 await document.fonts.ready;
                 let loaded = 0;
+                
                 families.forEach(font => {
                     const safeName = font.replace(/[^a-zA-Z0-9]/g, '-');
                     const el = document.getElementById(`status-${safeName}`);
                     if (el) {
+                        let isLoaded = false;
+                        
+                        // Check 1: Standard API
                         if (document.fonts.check(`12px "${font}"`)) {
+                            isLoaded = true;
+                        } 
+                        // Check 2: Robust Fallback (Iterate loaded set)
+                        else {
+                            for (const face of document.fonts) {
+                                if (face.family === font && face.status === 'loaded') {
+                                    isLoaded = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        if (isLoaded) {
                             el.textContent = 'OK';
                             el.className = 'font-status-loaded';
                             el.title = "Font loaded and ready for Canvas/DOM";
@@ -293,7 +318,6 @@
                         } else {
                             el.textContent = '...';
                             el.className = 'font-status-pending';
-                            // Technical detail tooltip
                             el.title = "Font object defined but not yet downloaded by the browser.\nWeb browsers lazy-load fonts; they only download when text using this font is rendered.\nDouble-click this row to force a layout trigger.";
                         }
                     }
