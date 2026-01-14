@@ -93,6 +93,8 @@ export const generateBackgroundImage = async (
     logger?: (msg: string) => void
 ): Promise<GeneratedImageResult> => {
   try {
+    if (logger) logger(`[INIT] Initializing Gemini Client...`);
+    
     const ai = getClient(apiKey);
     const targetRatio = getApiAspectRatio(aspectRatio, orientation);
 
@@ -101,7 +103,6 @@ export const generateBackgroundImage = async (
         imageConfig: {
             aspectRatio: targetRatio,
         },
-        safetySettings: SAFETY_SETTINGS
     };
 
     // Only Gemini 3 Pro Image Preview supports 'imageSize' and 'googleSearch'
@@ -110,36 +111,42 @@ export const generateBackgroundImage = async (
         config.tools = [{ googleSearch: {} }];
     }
 
+    if (logger) {
+        logger(`[CONFIG] Model: ${model}`);
+        logger(`[CONFIG] Target Resolution: ${resolution}`);
+        logger(`[CONFIG] Aspect Ratio: ${targetRatio}`);
+        logger(`[CONFIG] Safety Settings: Active (Block High)`);
+    }
+
     // Cleanly construct prompt by filtering out empty strings
     const promptParts = [prompt, quality, systemPrompt].filter(p => p && p.trim().length > 0);
     const fullPrompt = promptParts.join('. ');
+
+    if (logger) {
+        logger(`[PROMPT] User: "${prompt}"`);
+        if (quality) logger(`[PROMPT] Modifiers: "${quality}"`);
+        if (systemPrompt) logger(`[PROMPT] System: "${systemPrompt}"`);
+        logger(`[PROMPT] Full context length: ${fullPrompt.length} chars`);
+    }
 
     // Calculate approximate request size
     const requestPayloadJSON = JSON.stringify({
         model,
         contents: [{ parts: [{ text: fullPrompt }] }],
-        config
+        config,
+        safetySettings: SAFETY_SETTINGS
     });
     const requestSizeKB = (new TextEncoder().encode(requestPayloadJSON).length / 1024).toFixed(2);
 
     if (logger) {
-        logger(`[REQUEST] Initiating Generation...`);
-        logger(`  Model: ${model}`);
-        logger(`  Resolution: ${resolution}`);
-        logger(`  Aspect Ratio: ${targetRatio}`);
-        logger(`  Payload Size: ~${requestSizeKB} KB`);
-        logger(`  -- Parameters --`);
-        logger(`  Base Prompt: "${prompt}"`);
-        logger(`  Quality Param: "${quality}"`);
-        logger(`  System Param: "${systemPrompt}"`);
-        logger(`  [FINAL PROMPT]: "${fullPrompt}"`); // Explicitly log the final prompt
-        
-        if (model === 'gemini-3-pro-image-preview') {
-            logger(`  Grounding: Search Enabled`);
-        }
+        logger(`[PAYLOAD] Tools: ${JSON.stringify(config.tools || 'None')}`);
+        logger(`[PAYLOAD] ImageConfig: ${JSON.stringify(config.imageConfig)}`);
+        logger(`[PAYLOAD] Est. Size: ~${requestSizeKB} KB`);
     }
 
     const startTime = Date.now();
+
+    if (logger) logger(`[NETWORK] Establishing secure connection to Google GenAI Endpoint...`);
 
     const request = ai.models.generateContent({
       model: model,
@@ -149,16 +156,33 @@ export const generateBackgroundImage = async (
         ]
       },
       config: config,
-    });
+      safetySettings: SAFETY_SETTINGS,
+    } as any);
 
-    if (logger) logger(`[STATUS] Waiting for server response...`);
+    // NOTE: The request promise is created above, meaning the fetch has been initiated by the SDK.
+    if (logger) {
+        logger(`[NETWORK] Connection established. Payload sent.`);
+        logger(`[NETWORK] > POST /v1beta/models/${model}:generateContent`);
+        logger(`[STATUS] Awaiting server processing (this may take 10-20s)...`);
+    }
 
     const response = await withAbort(request, signal) as GenerateContentResponse;
     
     const latency = Date.now() - startTime;
     if (logger) {
-        logger(`[RESPONSE] Received in ${latency}ms`);
-        logger(`  Candidate Count: ${response.candidates?.length || 0}`);
+        logger(`[NETWORK] < Response received in ${latency}ms`);
+        // Log Raw Structure for strict factual transparency
+        logger(`[RAW] ${JSON.stringify(response, (key, value) => {
+             // Omit the huge Base64 string from console logs to prevent freezing
+             if ((key === 'parts' || key === 'data') && typeof value === 'string' && value.length > 100) return '[Base64 Image Data Omitted]'; 
+             if (key === 'data' && typeof value === 'string') return '[Base64 Data]';
+             return value;
+        }, 2)}`);
+        logger(`[SERVER] Candidate Count: ${response.candidates?.length || 0}`);
+    }
+
+    if (response.usageMetadata && logger) {
+        logger(`[METADATA] Token Usage: ${JSON.stringify(response.usageMetadata)}`);
     }
 
     let textResponse = '';
@@ -166,14 +190,19 @@ export const generateBackgroundImage = async (
 
     // Parse response for image part
     for (const candidate of response.candidates || []) {
-        if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+        if (candidate.finishReason) {
             finishReason = candidate.finishReason;
-            if (logger) logger(`[WARNING] Finish Reason: ${finishReason}`);
+            if (logger) logger(`[SERVER] Finish Reason: ${finishReason}`);
+        }
+        
+        if (candidate.safetyRatings && logger) {
+             const ratings = candidate.safetyRatings.map(r => `${r.category}=${r.probability}`).join(', ');
+             logger(`[SERVER] Safety Ratings: ${ratings}`);
         }
 
         const groundingMetadata = candidate.groundingMetadata;
         if (groundingMetadata && logger) {
-            logger(`[INFO] Grounding Metadata received`);
+            logger(`[INFO] Grounding Metadata received (Search Grounding active)`);
         }
 
         for (const part of candidate.content?.parts || []) {
@@ -238,6 +267,7 @@ export const editImage = async (
     logger?: (msg: string) => void
 ): Promise<GeneratedImageResult> => {
   try {
+    if (logger) logger(`[INIT] Initializing Edit Session...`);
     const ai = getClient(apiKey);
     const targetRatio = getApiAspectRatio(aspectRatio, orientation);
     
@@ -256,7 +286,6 @@ export const editImage = async (
         imageConfig: {
             aspectRatio: targetRatio,
         },
-        safetySettings: SAFETY_SETTINGS
     };
 
     // Only Gemini 3 Pro Image Preview supports 'imageSize' and 'googleSearch'
@@ -270,23 +299,20 @@ export const editImage = async (
     const fullPrompt = promptParts.join('. ');
 
     if (logger) {
-        logger(`[REQUEST] Initiating Edit...`);
-        logger(`  Model: ${model}`);
-        logger(`  Input Image: ${inputSizeMB.toFixed(2)} MB (${mimeType})`);
-        logger(`  Target Resolution: ${resolution}`);
-        logger(`  Aspect Ratio: ${targetRatio}`);
-        logger(`  -- Parameters --`);
-        logger(`  Base Prompt: "${prompt}"`);
-        logger(`  Quality Param: "${quality}"`);
-        logger(`  System Param: "${systemPrompt}"`);
-        logger(`  [FINAL PROMPT]: "${fullPrompt}"`); // Explicitly log
+        logger(`[CONFIG] Model: ${model}`);
+        logger(`[CONFIG] Input Image: ${inputSizeMB.toFixed(2)} MB (${mimeType})`);
+        logger(`[CONFIG] Target Resolution: ${resolution}`);
+        logger(`[CONFIG] Aspect Ratio: ${targetRatio}`);
         
-        if (model === 'gemini-3-pro-image-preview') {
-            logger(`  Grounding: Search Enabled`);
-        }
+        logger(`[PROMPT] User: "${prompt}"`);
+        if (systemPrompt) logger(`[PROMPT] System: "${systemPrompt}"`);
+        
+        logger(`[PAYLOAD] Tools: ${JSON.stringify(config.tools || 'None')}`);
     }
 
     const startTime = Date.now();
+
+    if (logger) logger(`[NETWORK] Establishing secure connection...`);
 
     // Use selected model for editing/inpainting capabilities
     const request = ai.models.generateContent({
@@ -305,15 +331,31 @@ export const editImage = async (
         ],
       },
       config: config,
-    });
+      safetySettings: SAFETY_SETTINGS,
+    } as any);
 
-    if (logger) logger(`[STATUS] Sending payload to server...`);
+    if (logger) {
+        logger(`[NETWORK] Connection established. Sending Edit Request...`);
+        logger(`[NETWORK] > POST /v1beta/models/${model}:generateContent`);
+        logger(`[STATUS] Awaiting processing...`);
+    }
 
     const response = await withAbort(request, signal) as GenerateContentResponse;
 
     const latency = Date.now() - startTime;
     if (logger) {
-        logger(`[RESPONSE] Received in ${latency}ms`);
+        logger(`[NETWORK] < Response received in ${latency}ms`);
+        // Log Raw Structure
+        logger(`[RAW] ${JSON.stringify(response, (key, value) => {
+             if ((key === 'parts' || key === 'data') && typeof value === 'string' && value.length > 100) return '[Base64 Image Data Omitted]'; 
+             if (key === 'data' && typeof value === 'string') return '[Base64 Data]';
+             return value;
+        }, 2)}`);
+        logger(`[SERVER] Candidate Count: ${response.candidates?.length || 0}`);
+    }
+
+    if (response.usageMetadata && logger) {
+        logger(`[METADATA] Token Usage: ${JSON.stringify(response.usageMetadata)}`);
     }
 
     let textResponse = '';
@@ -321,9 +363,9 @@ export const editImage = async (
 
     // Parse response for image part (standard generateContent response structure)
     for (const candidate of response.candidates || []) {
-        if (candidate.finishReason && candidate.finishReason !== 'STOP') {
+        if (candidate.finishReason) {
              finishReason = candidate.finishReason;
-             if (logger) logger(`[WARNING] Finish Reason: ${finishReason}`);
+             if (logger) logger(`[SERVER] Finish Reason: ${finishReason}`);
         }
 
         const groundingMetadata = candidate.groundingMetadata;

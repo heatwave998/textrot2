@@ -63,6 +63,15 @@ export default function App() {
     }
   }, [settings.showFontDebug]);
 
+  // Listen for Font Debug Close from Vanilla JS layer
+  useEffect(() => {
+    const handleCloseFontDebug = () => {
+        setSettings(prev => ({ ...prev, showFontDebug: false }));
+    };
+    window.addEventListener('textrot-close-font-debug', handleCloseFontDebug);
+    return () => window.removeEventListener('textrot-close-font-debug', handleCloseFontDebug);
+  }, []);
+
   // Helper: Log to Loading Overlay
   const log = (message: string) => {
       const timestamp = new Date().toLocaleTimeString();
@@ -83,22 +92,50 @@ export default function App() {
   };
 
   // --- History Management ---
-  const addToHistory = (newImageSrc: string, ratio: AspectRatio, orientation: Orientation, layers: TextLayer[], bgType: 'image' | 'solid', bgColor: string, metadata?: any) => {
-    const newItem: ImageHistoryItem = { 
+  const addToHistory = (
+      newImageSrc: string, 
+      ratio: AspectRatio, 
+      orientation: Orientation, 
+      layers: TextLayer[], 
+      bgType: 'image' | 'solid', 
+      bgColor: string, 
+      metadata?: any,
+      snapshotCurrent: boolean = false
+  ) => {
+    const currentHistory = imageHistory.slice(0, historyIndex + 1);
+    const itemsToAdd: ImageHistoryItem[] = [];
+
+    // Optional: Snapshot current state before adding new item
+    // This preserves intermediate work (layer moves, text changes) done before a major action (Upload/Generate)
+    if (snapshotCurrent) {
+        // Only snapshot if there is actual content or change? 
+        // For simplicity and safety, we snapshot if requested.
+        // We use current 'design' and 'imageSrc' from state closure.
+        itemsToAdd.push({
+            src: imageSrc || '',
+            aspectRatio: design.aspectRatio,
+            orientation: design.orientation,
+            layers: design.layers,
+            backgroundType: design.backgroundType,
+            backgroundColor: design.backgroundColor,
+            groundingMetadata: groundingMetadata
+        });
+    }
+
+    itemsToAdd.push({ 
         src: newImageSrc, 
         aspectRatio: ratio, 
         orientation, 
         layers, 
         backgroundType: bgType,
-        backgroundColor: bgColor,
+        backgroundColor: bgColor, 
         groundingMetadata: metadata 
-    };
+    });
     
-    const currentHistory = imageHistory.slice(0, historyIndex + 1);
-    const newHistory = [...currentHistory, newItem];
+    let newHistory = [...currentHistory, ...itemsToAdd];
     
-    if (newHistory.length > 10) {
-        newHistory.shift();
+    if (newHistory.length > 20) {
+        newHistory = newHistory.slice(newHistory.length - 20);
     }
     
     setImageHistory(newHistory);
@@ -112,7 +149,7 @@ export default function App() {
   const handleSnapshot = (designOverride?: DesignState) => {
       const d = designOverride || design;
       // We rely on current imageSrc for background
-      addToHistory(imageSrc || '', d.aspectRatio, d.orientation, d.layers, d.backgroundType, d.backgroundColor, groundingMetadata);
+      addToHistory(imageSrc || '', d.aspectRatio, d.orientation, d.layers, d.backgroundType, d.backgroundColor, groundingMetadata, false);
   };
 
   const handleUndo = () => {
@@ -232,13 +269,13 @@ export default function App() {
       const newLayers = design.layers.map(l => ({
         ...l,
         textOverlay: l.id === design.activeLayerId && l.textOverlay === 'EDIT ME' ? design.prompt.substring(0, 20).toUpperCase() : l.textOverlay,
-        pathPoints: [],
+        // Preserve paths
         isPathInputMode: false,
         isPathMoveMode: false,
       }));
 
-      // Generate sets type to 'image'
-      addToHistory(imageData, design.aspectRatio, design.orientation, newLayers, 'image', design.backgroundColor, groundingMetadata);
+      // Generate sets type to 'image'. Snapshot current state first.
+      addToHistory(imageData, design.aspectRatio, design.orientation, newLayers, 'image', design.backgroundColor, groundingMetadata, true);
       
       setDesign(prev => ({
         ...prev,
@@ -306,8 +343,8 @@ export default function App() {
           const { imageData, groundingMetadata } = result;
 
           log("Response received. Updating canvas...");
-          // Edit maintains 'image' type
-          addToHistory(imageData, design.aspectRatio, design.orientation, design.layers, 'image', design.backgroundColor, groundingMetadata);
+          // Edit maintains 'image' type. Snapshot current state first.
+          addToHistory(imageData, design.aspectRatio, design.orientation, design.layers, 'image', design.backgroundColor, groundingMetadata, true);
           // Do NOT reset view for Edit (Inpainting)
           log("Edit complete.");
           
@@ -363,9 +400,9 @@ export default function App() {
     const newId = crypto.randomUUID();
     const newLayers = [createLayer(newId, 'BLANK CANVAS')];
     
-    // Blank Canvas sets type to 'solid' and defaults to dark gray/black
+    // Blank Canvas sets type to 'solid' and defaults to dark gray/black. Snapshot current state first.
     const newBgColor = '#181818';
-    addToHistory(blankImgData, design.aspectRatio, design.orientation, newLayers, 'solid', newBgColor, null);
+    addToHistory(blankImgData, design.aspectRatio, design.orientation, newLayers, 'solid', newBgColor, null, true);
     
     setDesign(prev => ({
         ...prev,
@@ -432,10 +469,15 @@ export default function App() {
                 }
             });
 
-            const cleanLayers = design.layers.map(l => ({ ...l, pathPoints: [], isPathInputMode: false, isPathMoveMode: false }));
+            const cleanLayers = design.layers.map(l => ({ 
+                ...l, 
+                // Preserve existing path points, just reset modes
+                isPathInputMode: false, 
+                isPathMoveMode: false 
+            }));
             
-            // Upload sets type to 'image'
-            addToHistory(result, closestRatio, newOrientation, cleanLayers, 'image', design.backgroundColor, null);
+            // Upload sets type to 'image'. Snapshot current state first.
+            addToHistory(result, closestRatio, newOrientation, cleanLayers, 'image', design.backgroundColor, null, true);
             
             setDesign(prev => ({
                 ...prev,

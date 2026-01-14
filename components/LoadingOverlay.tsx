@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Loader2, X, Terminal, SquareTerminal, Sparkles, StopCircle, Check } from 'lucide-react';
 
 interface LoadingOverlayProps {
@@ -36,14 +35,18 @@ const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
 }) => {
   const [flavorText, setFlavorText] = useState(FLAVOR_TEXTS[0]);
   const [elapsed, setElapsed] = useState(0);
+  const logEndRef = useRef<HTMLDivElement>(null);
+  const startTimeRef = useRef<number>(0);
 
-  // Cycle flavor text
+  // Cycle flavor text and manage timer
   useEffect(() => {
     if (!isVisible || !isProcessing) {
         if (!isVisible) setElapsed(0);
         return;
     }
     
+    // Set start time for accurate wall-clock measurement
+    startTimeRef.current = Date.now();
     setFlavorText(FLAVOR_TEXTS[Math.floor(Math.random() * FLAVOR_TEXTS.length)]);
 
     const textInterval = setInterval(() => {
@@ -51,7 +54,10 @@ const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
     }, 2500);
 
     const timerInterval = setInterval(() => {
-        setElapsed(prev => prev + 0.1);
+        // Calculate exact elapsed time based on system clock
+        // This prevents the timer from pausing/drifting if the tab is backgrounded
+        const now = Date.now();
+        setElapsed((now - startTimeRef.current) / 1000);
     }, 100);
 
     return () => {
@@ -59,6 +65,13 @@ const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
       clearInterval(timerInterval);
     };
   }, [isVisible, isProcessing]);
+
+  // Auto-scroll logs
+  useEffect(() => {
+    if (showDebug && logEndRef.current) {
+        logEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [logs, showDebug]);
 
   if (!isVisible) return null;
 
@@ -144,7 +157,10 @@ const LoadingOverlay: React.FC<LoadingOverlayProps> = ({
                         </div>
                     </div>
                     <div className="max-h-64 overflow-y-auto custom-scrollbar font-mono text-[9px] leading-relaxed text-green-500/90 whitespace-pre-wrap">
-                        {logs.length === 0 ? "// Waiting for logs..." : logs.join('\n')}
+                        {logs.length === 0 ? "// Waiting for logs..." : logs.map((log, i) => (
+                            <div key={i} className="mb-1">{log}</div>
+                        ))}
+                        <div ref={logEndRef} />
                         <div className="animate-pulse mt-1 inline-block w-2 h-3 bg-green-500/50"></div>
                     </div>
                 </div>
